@@ -1,0 +1,10 @@
+{
+  "name": "VoiceFlow AI",
+  "description": "Convert text to natural AI voice and transform speech into editable text with VoiceFlow AI.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
