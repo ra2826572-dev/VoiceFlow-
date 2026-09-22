@@ -88,8 +88,14 @@ const MainAppContent: React.FC = () => {
   const { isAuthenticated } = useAuth();
 
   const [currentView, setCurrentView] = useState<string>(() => {
-    return 'dashboard';
+    return localStorage.getItem('voiceflow_user') ? 'dashboard' : 'login';
   });
+
+  useEffect(() => {
+    if (!isAuthenticated && currentView !== 'login' && currentView !== 'landing') {
+      setCurrentView('login');
+    }
+  }, [isAuthenticated, currentView]);
 
   const [studioInitialText, setStudioInitialText] = useState<string | undefined>(undefined);
   const [canvasKey, setCanvasKey] = useState<number>(0);

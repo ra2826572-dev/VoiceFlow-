@@ -46,10 +46,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // fallback
         }
       }
-      // Initialize with default authenticated user as specified
-      return DEFAULT_USER;
+      return null;
     }
-    return DEFAULT_USER;
+    return null;
   });
 
   const [isLoading, setIsLoading] = useState<boolean>(false);

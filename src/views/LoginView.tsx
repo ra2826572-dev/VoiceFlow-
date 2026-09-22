@@ -62,13 +62,13 @@ export const LoginView: React.FC<{ onNavigate: (view: string) => void }> = ({ on
             </div>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Email Address</label>
+            <label className="text-xs font-semibold text-slate-300">Username / Email Address</label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
-                type="email"
+                type="text"
                 required
-                placeholder="name@example.com"
+                placeholder="username or name@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-9 pr-3 py-2.5 rounded-xl text-sm bg-slate-800 border border-slate-700 text-white focus:ring-2 focus:ring-purple-500"
