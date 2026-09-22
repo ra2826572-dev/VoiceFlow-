@@ -6,6 +6,7 @@ import { Navbar } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
 import { Sidebar } from './components/Sidebar';
 import { LandingPage } from './views/LandingPage';
+import { LoginView } from './views/LoginView';
 import { Dashboard } from './views/Dashboard';
 import { VoiceStudio } from './views/VoiceStudio';
 import { VoiceToTextStudio } from './views/VoiceToTextStudio';
@@ -185,6 +186,11 @@ const MainAppContent: React.FC = () => {
   };
 
   const handleNavigate = (view: string) => {
+    const protectedViews = ['dashboard', 'studio', 'voice-to-text', 'history', 'favorites', 'profile', 'settings', 'pricing', 'help'];
+    if (protectedViews.includes(view) && !isAuthenticated) {
+      setCurrentView('login');
+      return;
+    }
     if (view === 'studio') {
       setStudioInitialText(undefined);
     }
@@ -225,6 +231,9 @@ const MainAppContent: React.FC = () => {
 
           {/* Workspace Main Scrollable Content */}
           <main className="flex-1 overflow-y-auto bg-[#090a0f] min-w-0">
+            {currentView === 'login' && (
+              <LoginView onNavigate={handleNavigate} />
+            )}
             {currentView === 'dashboard' && (
               <Dashboard
                 onNavigate={handleNavigate}

@@ -84,6 +84,9 @@ export const UserDropdown: React.FC<UserDropdownProps> = ({
                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
                   {user.email}
                 </p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono truncate mt-0.5">
+                  ID: {user.id}
+                </p>
               </div>
             </div>
           </div>
