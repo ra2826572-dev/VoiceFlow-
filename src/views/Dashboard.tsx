@@ -111,135 +111,184 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
-      {/* 2. Quick Actions Section */}
+      {/* 2. Studio Modules Hub */}
       <section className="space-y-3">
-        <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-          QUICK ACTIONS
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            STUDIO MODULES & CREATIVE SUITE
+          </h2>
+          <span className="text-[10px] text-purple-400 font-semibold uppercase tracking-wider">
+            8 Pro Systems Active
+          </span>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Card 1: Text to Voice */}
+          {/* Module 1: AI Voice Features */}
           <div
-            id="card-quick-tts"
-            onClick={() => onNavigate('studio')}
+            id="card-quick-voice-studio"
+            onClick={() => onNavigate('voice-studio')}
             className="group p-5 rounded-2xl bg-[#12131a] hover:bg-[#161722] border border-slate-800/80 hover:border-purple-500/50 transition-all cursor-pointer flex flex-col justify-between shadow-xs"
           >
             <div>
               <div className="w-10 h-10 rounded-xl bg-purple-950/90 text-purple-400 border border-purple-800/50 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
                 <Radio className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-bold text-white mb-1.5">
-                Text to Voice
+              <h3 className="text-sm font-bold text-white mb-1.5 flex items-center gap-1.5">
+                <span>AI Voice Studio</span>
+                <span className="text-[9px] px-1 rounded bg-purple-500/20 text-purple-300">Cloning</span>
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                Synthesize high-fidelity voice audio from scripts.
+                Upload sample voices, clone custom voices, and browse 10+ voice categories.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNavigate('studio');
-              }}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-purple-400 hover:text-purple-300 transition-colors group-hover:translate-x-0.5 cursor-pointer"
-            >
-              <span>Open Studio</span>
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-purple-400 group-hover:translate-x-0.5">
+              <span>Open Voice Studio</span>
               <span>→</span>
-            </button>
+            </span>
           </div>
 
-          {/* Card 2: Voice to Text */}
+          {/* Module 2: Multi-Speaker Studio */}
           <div
-            id="card-quick-stt"
-            onClick={() => onNavigate('voice-to-text')}
+            id="card-quick-multi-speaker"
+            onClick={() => onNavigate('multi-speaker')}
             className="group p-5 rounded-2xl bg-[#12131a] hover:bg-[#161722] border border-slate-800/80 hover:border-indigo-500/50 transition-all cursor-pointer flex flex-col justify-between shadow-xs"
           >
             <div>
               <div className="w-10 h-10 rounded-xl bg-indigo-950/90 text-indigo-400 border border-indigo-800/50 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
-                <Mic className="w-5 h-5" />
+                <Sparkles className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-bold text-white mb-1.5">
-                Voice to Text
+              <h3 className="text-sm font-bold text-white mb-1.5 flex items-center gap-1.5">
+                <span>Multi-Speaker Studio</span>
+                <span className="text-[9px] px-1 rounded bg-indigo-500/20 text-indigo-300">Dialogue</span>
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                Record microphone speech or transcribe audio.
+                Orchestrate natural multi-character dialogues and conversational podcast scripts.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNavigate('voice-to-text');
-              }}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors group-hover:translate-x-0.5 cursor-pointer"
-            >
-              <span>Start Recording</span>
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-400 group-hover:translate-x-0.5">
+              <span>Launch Dialogue Flow</span>
               <span>→</span>
-            </button>
+            </span>
           </div>
 
-          {/* Card 3: New Conversion */}
+          {/* Module 3: AI Writing Studio */}
           <div
-            id="card-quick-new-canvas"
-            onClick={() => {
-              if (onNewCanvas) onNewCanvas();
-              onNavigate('studio');
-            }}
+            id="card-quick-writing-studio"
+            onClick={() => onNavigate('writing-studio')}
             className="group p-5 rounded-2xl bg-[#12131a] hover:bg-[#161722] border border-slate-800/80 hover:border-fuchsia-500/50 transition-all cursor-pointer flex flex-col justify-between shadow-xs"
           >
             <div>
               <div className="w-10 h-10 rounded-xl bg-fuchsia-950/90 text-fuchsia-400 border border-fuchsia-800/50 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
-                <PlusCircle className="w-5 h-5" />
+                <FileText className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-bold text-white mb-1.5">
-                New Conversion
+              <h3 className="text-sm font-bold text-white mb-1.5 flex items-center gap-1.5">
+                <span>AI Writing Studio</span>
+                <span className="text-[9px] px-1 rounded bg-fuchsia-500/20 text-fuchsia-300">Scripts</span>
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                Start a fresh canvas with multilingual voices.
+                Generate YouTube, TikTok, Reel scripts, ad copy, and blogs with tone controls.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onNewCanvas) onNewCanvas();
-                onNavigate('studio');
-              }}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-fuchsia-400 hover:text-fuchsia-300 transition-colors group-hover:translate-x-0.5 cursor-pointer"
-            >
-              <span>New Canvas</span>
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-fuchsia-400 group-hover:translate-x-0.5">
+              <span>Write with AI</span>
               <span>→</span>
-            </button>
+            </span>
           </div>
 
-          {/* Card 4: History & Exports */}
+          {/* Module 4: Multi-Language AI */}
           <div
-            id="card-quick-history"
-            onClick={() => onNavigate('history')}
+            id="card-quick-multi-lang"
+            onClick={() => onNavigate('multi-language')}
+            className="group p-5 rounded-2xl bg-[#12131a] hover:bg-[#161722] border border-slate-800/80 hover:border-emerald-500/50 transition-all cursor-pointer flex flex-col justify-between shadow-xs"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-emerald-950/90 text-emerald-400 border border-emerald-800/50 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
+                <Volume2 className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white mb-1.5 flex items-center gap-1.5">
+                <span>Multi-Language AI</span>
+                <span className="text-[9px] px-1 rounded bg-emerald-500/20 text-emerald-300">15+</span>
+              </h3>
+              <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                Text and voice-to-voice translation across Urdu, English, Hindi, and Arabic.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 group-hover:translate-x-0.5">
+              <span>Translate Now</span>
+              <span>→</span>
+            </span>
+          </div>
+
+          {/* Module 5: Professional Audio Studio */}
+          <div
+            id="card-quick-audio-studio"
+            onClick={() => onNavigate('audio-studio')}
+            className="group p-5 rounded-2xl bg-[#12131a] hover:bg-[#161722] border border-slate-800/80 hover:border-blue-500/50 transition-all cursor-pointer flex flex-col justify-between shadow-xs"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-blue-950/90 text-blue-400 border border-blue-800/50 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
+                <Headphones className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white mb-1.5 flex items-center gap-1.5">
+                <span>Audio Studio DAW</span>
+                <span className="text-[9px] px-1 rounded bg-blue-500/20 text-blue-300">Visual</span>
+              </h3>
+              <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                Visual waveform editor. Cut, trim, split, add background music & sound effects.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-400 group-hover:translate-x-0.5">
+              <span>Open Timeline DAW</span>
+              <span>→</span>
+            </span>
+          </div>
+
+          {/* Module 7: Project Management */}
+          <div
+            id="card-quick-projects"
+            onClick={() => onNavigate('projects')}
+            className="group p-5 rounded-2xl bg-[#12131a] hover:bg-[#161722] border border-slate-800/80 hover:border-amber-500/50 transition-all cursor-pointer flex flex-col justify-between shadow-xs"
+          >
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-amber-950/90 text-amber-400 border border-amber-800/50 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
+                <PlusCircle className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white mb-1.5 flex items-center gap-1.5">
+                <span>Projects & Folders</span>
+                <span className="text-[9px] px-1 rounded bg-amber-500/20 text-amber-300">Files</span>
+              </h3>
+              <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                Organize voices, audio timelines, scripts, and exports in custom folders.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-400 group-hover:translate-x-0.5">
+              <span>View Projects</span>
+              <span>→</span>
+            </span>
+          </div>
+
+          {/* Module 8: Voice to Text STT */}
+          <div
+            id="card-quick-stt"
+            onClick={() => onNavigate('voice-to-text')}
             className="group p-5 rounded-2xl bg-[#12131a] hover:bg-[#161722] border border-slate-800/80 hover:border-teal-500/50 transition-all cursor-pointer flex flex-col justify-between shadow-xs"
           >
             <div>
               <div className="w-10 h-10 rounded-xl bg-teal-950/90 text-teal-400 border border-teal-800/50 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
-                <History className="w-5 h-5" />
+                <Mic className="w-5 h-5" />
               </div>
-              <h3 className="text-sm font-bold text-white mb-1.5">
-                History & Exports
+              <h3 className="text-sm font-bold text-white mb-1.5 flex items-center gap-1.5">
+                <span>Voice to Text</span>
+                <span className="text-[9px] px-1 rounded bg-teal-500/20 text-teal-300">STT</span>
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                Access your past voice audio & transcriptions.
+                Record microphone speech or upload audio to generate accurate transcripts.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onNavigate('history');
-              }}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-teal-400 hover:text-teal-300 transition-colors group-hover:translate-x-0.5 cursor-pointer"
-            >
-              <span>Browse All</span>
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-teal-400 group-hover:translate-x-0.5">
+              <span>Start Dictation</span>
               <span>→</span>
-            </button>
+            </span>
           </div>
         </div>
       </section>

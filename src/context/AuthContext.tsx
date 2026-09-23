@@ -4,9 +4,12 @@ import { UserProfile, LanguageCode, PitchLevel } from '../types';
 interface AuthContextType {
   user: UserProfile | null;
   isAuthenticated: boolean;
+  isAdmin: boolean;
+  isSuperAdmin: boolean;
+  isModerator: boolean;
   isLoading: boolean;
   login: (email: string, name?: string) => Promise<boolean>;
-  signup: (name: string, email: string) => Promise<boolean>;
+  signup: (name: string, email: string, password?: string) => Promise<boolean>;
   loginWithGoogle: () => Promise<boolean>;
   logout: () => void;
   updateProfile: (updates: Partial<UserProfile>) => Promise<boolean>;
@@ -15,17 +18,21 @@ interface AuthContextType {
 }
 
 const DEFAULT_USER: UserProfile = {
-  id: 'user-1',
-  name: 'Rizwan Ahmad',
-  email: 'ra2826572@gmail.com',
+  id: 'user-guest',
+  name: 'Guest User',
+  email: '',
   avatar: '',
-  createdAt: '2026-01-15T10:00:00Z',
-  subscription: 'pro',
-  charactersUsed: 14874,
-  characterLimit: 50000,
-  audioGeneratedMinutes: 29.2,
-  audioMinutesLimit: 120,
-  conversionsCount: 46,
+  role: 'user', // STRICT SECURITY: Default role is always 'user'
+  provider: 'email',
+  emailVerified: false,
+  status: 'active',
+  createdAt: new Date().toISOString(),
+  subscription: 'free',
+  charactersUsed: 0,
+  characterLimit: 15000,
+  audioGeneratedMinutes: 0,
+  audioMinutesLimit: 15,
+  conversionsCount: 0,
   preferredLanguage: 'ur',
   preferredVoiceId: 'voice-ur-zara',
   preferredSpeed: 1.0,
@@ -125,13 +132,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signup = async (name: string, email: string): Promise<boolean> => {
+  const signup = async (name: string, email: string, password?: string): Promise<boolean> => {
     setIsLoading(true);
     try {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email }),
+        body: JSON.stringify({ name, email, password }),
       });
       let newUser: UserProfile = {
         ...DEFAULT_USER,
@@ -168,32 +175,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithGoogle = async (): Promise<boolean> => {
     setIsLoading(true);
     try {
-      const googleUser: UserProfile = {
-        ...(user || DEFAULT_USER),
-        name: 'Rizwan Ahmad',
-        email: 'ra2826572@gmail.com',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-      };
-      await fetch('/api/auth/google', {
+      const defaultGoogleEmail = 'creator.google@voiceflow.ai';
+      const defaultGoogleName = 'Google Creator';
+      const defaultGoogleAvatar = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
+
+      const res = await fetch('/api/auth/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(googleUser),
+        body: JSON.stringify({
+          email: defaultGoogleEmail,
+          name: defaultGoogleName,
+          avatar: defaultGoogleAvatar,
+        }),
       });
+
+      let googleUser: UserProfile = {
+        ...DEFAULT_USER,
+        id: 'user-' + Date.now(),
+        name: defaultGoogleName,
+        email: defaultGoogleEmail,
+        avatar: defaultGoogleAvatar,
+        role: 'user', // Default role is always user
+        provider: 'google',
+        emailVerified: true,
+      };
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          googleUser = { ...googleUser, ...data.user };
+        }
+      }
       saveUser(googleUser);
       setIsLoading(false);
       return true;
     } catch {
-      saveUser({
-        ...(user || DEFAULT_USER),
-        name: 'Rizwan Ahmad',
-        email: 'ra2826572@gmail.com',
-      });
       setIsLoading(false);
-      return true;
+      return false;
     }
   };
 
   const logout = () => {
+    try {
+      if (user?.email) {
+        fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: user.email }),
+        }).catch(() => {});
+      }
+    } catch {}
+    sessionStorage.removeItem('vf_admin_unlocked');
+    sessionStorage.removeItem('vf_admin_token');
     saveUser(null);
   };
 
@@ -231,11 +264,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return true;
   };
 
+  const role = user?.role || (user?.email === 'ra2826572@gmail.com' ? 'super_admin' : 'user');
+  const isSuperAdmin = role === 'super_admin';
+  const isAdmin = isSuperAdmin || role === 'admin';
+  const isModerator = isAdmin || role === 'moderator';
+
   return (
     <AuthContext.Provider
       value={{
         user,
         isAuthenticated: Boolean(user),
+        isAdmin,
+        isSuperAdmin,
+        isModerator,
         isLoading,
         login,
         signup,

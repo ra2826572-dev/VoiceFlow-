@@ -1,0 +1,84 @@
+{
+  "users": [
+    {
+      "id": "u-admin-1",
+      "auth_user_id": "auth_admin_591111",
+      "name": "Rizwan Ahmad",
+      "email": "ra2826572@gmail.com",
+      "avatar": "",
+      "role": "super_admin",
+      "subscription": "pro",
+      "plan": "pro",
+      "subscriptionStatus": "active",
+      "renewalDate": "2026-12-31",
+      "credits": 100000,
+      "creditsLimit": 100000,
+      "charactersUsed": 0,
+      "audioMinutes": 0,
+      "videoMinutes": 0,
+      "voiceGenerations": 0,
+      "aiWritingGenerations": 0,
+      "dubbingUsageMinutes": 0,
+      "creditsConsumed": 0,
+      "status": "active",
+      "isBanned": false,
+      "createdAt": "2026-09-23T11:45:39.731Z",
+      "lastLogin": "2026-09-23T11:45:39.731Z",
+      "loginCount": 1,
+      "provider": "email",
+      "emailVerified": true,
+      "totalProjects": 0,
+      "generatedAudios": 0,
+      "generatedVideos": 0,
+      "voiceClonesCount": 0,
+      "projects": [],
+      "activityLogs": [
+        {
+          "id": "act-1790166007915",
+          "type": "logout",
+          "description": "User logged out of VoiceFlow Studio",
+          "timestamp": "2026-09-23T12:20:07.915Z"
+        },
+        {
+          "id": "act-1790163939731",
+          "type": "login",
+          "description": "Administrator authentication verified",
+          "timestamp": "2026-09-23T11:45:39.731Z"
+        }
+      ],
+      "billingHistory": []
+    }
+  ],
+  "events": [
+    {
+      "id": "evt-1790165482803",
+      "type": "video_dubbed",
+      "title": "AI Video Dubbed Successfully",
+      "message": "Video dubbed to Chinese (12s)",
+      "userId": "user-1",
+      "userName": "Rizwan Ahmad",
+      "userEmail": "ra2826572@gmail.com",
+      "timestamp": "2026-09-23T12:11:22.803Z",
+      "badgeType": "info"
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "audit-1790163939731",
+      "adminEmail": "ra2826572@gmail.com",
+      "action": "ADMIN_CONSOLE_UNLOCKED",
+      "details": "Admin authentication successful. Session token issued.",
+      "timestamp": "2026-09-23T11:45:39.731Z",
+      "status": "success",
+      "ip": "127.0.0.1"
+    },
+    {
+      "id": "audit-1790163691586",
+      "adminEmail": "ra2826572@gmail.com",
+      "action": "ALL_USERS_CLEARED",
+      "details": "Wiped all user records from admin database upon administrator request.",
+      "timestamp": "2026-09-23T11:41:31.586Z",
+      "status": "success"
+    }
+  ]
+}

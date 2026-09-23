@@ -1,0 +1,116 @@
+[
+  {
+    "id": "dub_1790164323205_z4h8",
+    "userId": "user-1",
+    "name": "AI Dubbing — Tech Keynote Presentation",
+    "originalVideoUrl": "/sample-videos/tech-keynote.mp4",
+    "originalVideoName": "Tech Keynote Presentation.mp4",
+    "videoDuration": 12,
+    "originalLanguage": "English",
+    "targetLanguage": "Urdu",
+    "segments": [
+      {
+        "id": "seg-1",
+        "startTime": 0,
+        "endTime": 3.5999999999999996,
+        "speakerId": "speaker-1",
+        "speakerName": "Speaker 1 (Keynote Presenter)",
+        "originalText": "Welcome everyone! Today we are introducing next-generation neural AI video dubbing.",
+        "translatedText": "سبھی کو خوش آمدید! آج ہم نیورل اے آئی ویڈیو ڈبنگ متعارف کروا رہے ہیں۔",
+        "voiceId": "voice-ur-zara",
+        "voiceName": "Zara (اردو • Conversational)",
+        "speed": 1,
+        "pitch": "normal",
+        "volume": 100,
+        "status": "ready"
+      },
+      {
+        "id": "seg-2",
+        "startTime": 3.8999999999999995,
+        "endTime": 8.399999999999999,
+        "speakerId": "speaker-2",
+        "speakerName": "Speaker 2 (Co-Host)",
+        "originalText": "Notice how vocal resonance, natural pauses, and speaker emotions stay completely intact.",
+        "translatedText": "دیکھیں کہ کس طرح آواز کا گونجنا، قدرتی وقفے اور اصل جذبات مکمل طور پر برقرار رہتے ہیں۔",
+        "voiceId": "voice-ur-danyal",
+        "voiceName": "Danyal (اردو • Professional)",
+        "speed": 1,
+        "pitch": "normal",
+        "volume": 100,
+        "status": "ready"
+      },
+      {
+        "id": "seg-3",
+        "startTime": 8.799999999999999,
+        "endTime": 12,
+        "speakerId": "speaker-1",
+        "speakerName": "Speaker 1 (Keynote Presenter)",
+        "originalText": "You can now reach millions of international viewers effortlessly across any language.",
+        "translatedText": "اب آپ بغیر کسی مشقت کے اپنے ویڈیوز کو دنیا بھر کے ناظرین تک باآسانی پہنچا سکتے ہیں۔",
+        "voiceId": "voice-ur-zara",
+        "voiceName": "Zara (اردو • Conversational)",
+        "speed": 1,
+        "pitch": "normal",
+        "volume": 100,
+        "status": "ready"
+      }
+    ],
+    "speakers": [
+      {
+        "id": "speaker-1",
+        "name": "Speaker 1 (Keynote Presenter)",
+        "gender": "female",
+        "assignedVoiceId": "voice-ur-zara",
+        "assignedVoiceName": "Zara (اردو • Conversational)",
+        "color": "#8B5CF6"
+      },
+      {
+        "id": "speaker-2",
+        "name": "Speaker 2 (Co-Host)",
+        "gender": "male",
+        "assignedVoiceId": "voice-ur-danyal",
+        "assignedVoiceName": "Danyal (اردو • Professional)",
+        "color": "#3B82F6"
+      }
+    ],
+    "audioMixing": {
+      "dubbedVoiceVolume": 100,
+      "originalAudioVolume": 15,
+      "backgroundMusicVolume": 20,
+      "autoDucking": true,
+      "duckingAmount": 75,
+      "noiseReduction": true,
+      "audioNormalization": true,
+      "fadeInOut": true
+    },
+    "lipSync": {
+      "enabled": true,
+      "provider": "gemini_visual_sync",
+      "faceQuality": "hd",
+      "syncStrength": 85
+    },
+    "subtitleStyle": {
+      "fontFamily": "Inter",
+      "fontSize": 16,
+      "color": "#FFFFFF",
+      "backgroundColor": "#000000",
+      "backgroundOpacity": 80,
+      "position": "bottom",
+      "textShadow": true,
+      "bold": true
+    },
+    "processingStatus": "idle",
+    "progress": {
+      "stage": "translating",
+      "percent": 50,
+      "transcriptionPercent": 100,
+      "translationPercent": 100,
+      "voiceGenerationPercent": 0,
+      "audioMixingPercent": 0,
+      "renderingPercent": 0,
+      "message": "All 3 segments translated to Urdu."
+    },
+    "createdAt": "2026-09-23T11:52:03.205Z",
+    "updatedAt": "2026-09-23T11:52:23.719Z"
+  }
+]

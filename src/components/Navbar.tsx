@@ -4,6 +4,7 @@ import { UserAvatar } from './UserAvatar';
 import { UserDropdown } from './UserDropdown';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { NotificationCenter } from './NotificationCenter';
 import {
   Sun,
   Moon,
@@ -15,18 +16,27 @@ import {
   Mic,
   Headphones,
   History,
+  Bot,
+  Keyboard,
+  Users,
 } from 'lucide-react';
 
 interface NavbarProps {
   currentView: string;
   onNavigate: (view: string) => void;
   onOpenAuth: (mode: 'signin' | 'signup') => void;
+  onOpenAssistant?: () => void;
+  onOpenShortcuts?: () => void;
+  onOpenTeams?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentView,
   onNavigate,
   onOpenAuth,
+  onOpenAssistant,
+  onOpenShortcuts,
+  onOpenTeams,
 }) => {
   const { user, isAuthenticated } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -150,7 +160,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </nav>
 
         {/* Right Section: Theme Toggle + Auth / Avatar */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-2.5">
           {/* Dark / Light Mode Toggle */}
           <button
             id="theme-toggle-btn"
@@ -165,6 +175,41 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Moon className="w-4 h-4 text-purple-600" />
             )}
           </button>
+
+          {isAuthenticated && (
+            <>
+              {/* Keyboard Shortcuts Trigger */}
+              <button
+                onClick={onOpenShortcuts}
+                className="hidden sm:flex p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Keyboard Shortcuts (Shift + ?)"
+              >
+                <Keyboard className="w-4 h-4" />
+              </button>
+
+              {/* Team Workspace Trigger */}
+              <button
+                onClick={onOpenTeams}
+                className="hidden sm:flex p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Team Workspace"
+              >
+                <Users className="w-4 h-4" />
+              </button>
+
+              {/* Notification Center */}
+              <NotificationCenter onNavigate={onNavigate} />
+
+              {/* Quick AI Assistant Trigger */}
+              <button
+                onClick={onOpenAssistant}
+                className="p-2 rounded-xl bg-purple-600/20 border border-purple-500/40 text-purple-300 hover:bg-purple-600 hover:text-white transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
+                title="Open Studio AI Assistant"
+              >
+                <Bot className="w-4 h-4" />
+                <span className="hidden md:inline">AI Assistant</span>
+              </button>
+            </>
+          )}
 
           {!isAuthenticated ? (
             <div className="flex items-center gap-2">

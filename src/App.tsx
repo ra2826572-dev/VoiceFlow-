@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
-import { ToastProvider } from './context/ToastContext';
+import { ToastProvider, useToast } from './context/ToastContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
@@ -13,8 +13,27 @@ import { VoiceToTextStudio } from './views/VoiceToTextStudio';
 import { HistoryView } from './views/HistoryView';
 import { ProfileSettingsView } from './views/ProfileSettingsView';
 import { PricingView } from './views/PricingView';
+import { VoiceStudioView } from './views/VoiceStudioView';
+import { MultiSpeakerStudioView } from './views/MultiSpeakerStudioView';
+import { WritingStudioView } from './views/WritingStudioView';
+import { MultiLanguageStudioView } from './views/MultiLanguageStudioView';
+import { AudioStudioView } from './views/AudioStudioView';
+import { VideoDubbingStudioView } from './views/VideoDubbingStudioView';
+import { ProjectsView } from './views/ProjectsView';
+import { AIAssistantView } from './views/AIAssistantView';
+import { BillingView } from './views/BillingView';
+import { AdminDashboardView } from './views/AdminDashboardView';
+import { MarketplaceView } from './views/MarketplaceView';
+import { ApiPlatformView } from './views/ApiPlatformView';
+import { HelpCenterView } from './views/HelpCenterView';
+import { AIAssistantModal } from './components/AIAssistantModal';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { TeamWorkspaceModal } from './components/TeamWorkspaceModal';
+import { ShareProjectModal } from './components/ShareProjectModal';
+import { PublicAudioPlayerModal } from './components/PublicAudioPlayerModal';
+import { OnboardingModal } from './components/OnboardingModal';
+import { AdminPasswordModal } from './components/AdminPasswordModal';
 import { ConversionItem } from './types';
-import { VOICES_CATALOG } from './data/voices';
 
 // Sample initial conversions for rich interactive demonstration
 const INITIAL_CONVERSIONS: ConversionItem[] = [
@@ -85,7 +104,8 @@ const normalizeConversion = (item: any): ConversionItem => {
 };
 
 const MainAppContent: React.FC = () => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user, isAdmin } = useAuth();
+  const { error: toastError } = useToast();
 
   const [currentView, setCurrentView] = useState<string>(() => {
     return localStorage.getItem('voiceflow_user') ? 'dashboard' : 'login';
@@ -100,8 +120,46 @@ const MainAppContent: React.FC = () => {
   const [studioInitialText, setStudioInitialText] = useState<string | undefined>(undefined);
   const [canvasKey, setCanvasKey] = useState<number>(0);
 
+  // Modals state
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
+  const [assistantModalOpen, setAssistantModalOpen] = useState(false);
+  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const [teamsModalOpen, setTeamsModalOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [adminPasswordModalOpen, setAdminPasswordModalOpen] = useState(false);
+  const [activeShareData, setActiveShareData] = useState<{ id: string; name: string }>({
+    id: 'proj-1',
+    name: 'Urdu Podcast Audio',
+  });
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + K => Open AI Assistant
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setAssistantModalOpen((prev) => !prev);
+      }
+      // Shift + ? => Open Shortcuts
+      if (e.shiftKey && e.key === '?') {
+        e.preventDefault();
+        setShortcutsModalOpen((prev) => !prev);
+      }
+      // Esc => Close modals
+      if (e.key === 'Escape') {
+        setAssistantModalOpen(false);
+        setShortcutsModalOpen(false);
+        setTeamsModalOpen(false);
+        setShareModalOpen(false);
+        setOnboardingOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const [conversions, setConversions] = useState<ConversionItem[]>(() => {
     if (typeof window !== 'undefined') {
@@ -192,11 +250,48 @@ const MainAppContent: React.FC = () => {
   };
 
   const handleNavigate = (view: string) => {
-    const protectedViews = ['dashboard', 'studio', 'voice-to-text', 'history', 'favorites', 'profile', 'settings', 'pricing', 'help'];
+    const protectedViews = [
+      'dashboard',
+      'studio',
+      'voice-studio',
+      'multi-speaker',
+      'writing-studio',
+      'multi-language',
+      'audio-studio',
+      'video-dubbing',
+      'projects',
+      'voice-to-text',
+      'history',
+      'favorites',
+      'profile',
+      'settings',
+      'pricing',
+      'billing',
+      'help',
+      'help-center',
+      'ai-assistant',
+      'marketplace',
+      'api-platform',
+      'admin',
+    ];
     if (protectedViews.includes(view) && !isAuthenticated) {
       setCurrentView('login');
       return;
     }
+
+    if (view === 'admin') {
+      const isAuthorizedAdmin = isAdmin || user?.email === 'ra2826572@gmail.com' || sessionStorage.getItem('vf_admin_unlocked') === 'true';
+      if (!isAuthorizedAdmin) {
+        toastError('Access Denied: Administrator role required. Normal users cannot access Admin Console.');
+        return;
+      }
+      const isUnlocked = sessionStorage.getItem('vf_admin_unlocked') === 'true';
+      if (!isUnlocked) {
+        setAdminPasswordModalOpen(true);
+        return;
+      }
+    }
+
     if (view === 'studio') {
       setStudioInitialText(undefined);
     }
@@ -210,6 +305,9 @@ const MainAppContent: React.FC = () => {
         currentView={currentView}
         onNavigate={handleNavigate}
         onOpenAuth={handleOpenAuth}
+        onOpenAssistant={() => setAssistantModalOpen(true)}
+        onOpenShortcuts={() => setShortcutsModalOpen(true)}
+        onOpenTeams={() => setTeamsModalOpen(true)}
       />
 
       {/* Main View Router */}
@@ -228,7 +326,7 @@ const MainAppContent: React.FC = () => {
         </main>
       ) : (
         <div className="flex-1 flex overflow-hidden">
-          {/* Workspace Left Sidebar (matching design) */}
+          {/* Workspace Left Sidebar */}
           <Sidebar
             currentView={currentView}
             onNavigate={handleNavigate}
@@ -237,9 +335,8 @@ const MainAppContent: React.FC = () => {
 
           {/* Workspace Main Scrollable Content */}
           <main className="flex-1 overflow-y-auto bg-[#090a0f] min-w-0">
-            {currentView === 'login' && (
-              <LoginView onNavigate={handleNavigate} />
-            )}
+            {currentView === 'login' && <LoginView onNavigate={handleNavigate} />}
+
             {currentView === 'dashboard' && (
               <Dashboard
                 onNavigate={handleNavigate}
@@ -260,6 +357,40 @@ const MainAppContent: React.FC = () => {
               />
             )}
 
+            {currentView === 'voice-studio' && (
+              <VoiceStudioView
+                onSendToEditor={(text: string) => {
+                  setStudioInitialText(text);
+                  setCurrentView('studio');
+                }}
+              />
+            )}
+
+            {currentView === 'multi-speaker' && <MultiSpeakerStudioView />}
+
+            {currentView === 'writing-studio' && (
+              <WritingStudioView
+                onSendToVoiceStudio={(text) => {
+                  setStudioInitialText(text);
+                  setCurrentView('studio');
+                }}
+              />
+            )}
+
+            {currentView === 'multi-language' && <MultiLanguageStudioView />}
+
+            {currentView === 'audio-studio' && <AudioStudioView />}
+
+            {currentView === 'projects' && (
+              <ProjectsView
+                onOpenProject={(proj) => {
+                  if (proj.type === 'script') setCurrentView('writing-studio');
+                  else if (proj.type === 'audio') setCurrentView('audio-studio');
+                  else setCurrentView('studio');
+                }}
+              />
+            )}
+
             {currentView === 'voice-to-text' && (
               <VoiceToTextStudio onAddConversion={handleAddConversion} />
             )}
@@ -274,44 +405,46 @@ const MainAppContent: React.FC = () => {
 
             {(currentView === 'profile' || currentView === 'settings') && (
               <ProfileSettingsView
-                onNavigateToPricing={() => setCurrentView('pricing')}
+                onNavigateToPricing={() => setCurrentView('billing')}
               />
             )}
 
-            {currentView === 'pricing' && (
-              <PricingView onUpgradeSuccess={() => setCurrentView('studio')} />
+            {(currentView === 'pricing' || currentView === 'billing') && (
+              <BillingView />
             )}
 
-            {currentView === 'help' && (
-              <div className="max-w-3xl mx-auto px-4 py-12 space-y-6 text-center">
-                <h1 className="text-3xl font-black text-white">
-                  Help & Support
-                </h1>
-                <p className="text-slate-400 text-sm">
-                  Need assistance with VoiceFlow AI studio, custom voice models, or billing inquiries?
-                </p>
-                <div className="p-6 rounded-2xl border border-slate-800 bg-[#12131a] text-left space-y-3">
-                  <h4 className="font-bold text-sm text-white">Frequently Asked Questions</h4>
-                  <p className="text-xs text-slate-300">
-                    <strong>Q: How do I change my profile avatar?</strong><br />
-                    A: Click your avatar at the top right of the navbar → Select "Profile" → Upload any photo or switch to Initials mode ("RA").
-                  </p>
-                  <p className="text-xs text-slate-300">
-                    <strong>Q: Which audio formats can I download?</strong><br />
-                    A: Both lossless WAV and high-quality MP3 are available directly in the audio player.
-                  </p>
-                  <p className="text-xs text-slate-300">
-                    <strong>Q: Does VoiceFlow AI support Urdu and RTL languages?</strong><br />
-                    A: Yes! The editor features bidirectional RTL text support and custom neural voices for Urdu, Arabic, and Roman Urdu.
-                  </p>
+            {currentView === 'ai-assistant' && (
+              <AIAssistantView
+                onNavigateToVoiceStudio={(script) => {
+                  setStudioInitialText(script);
+                  setCurrentView('studio');
+                }}
+              />
+            )}
+
+            {currentView === 'marketplace' && (
+              <MarketplaceView
+                onUseVoiceInStudio={(voiceId) => {
+                  setCurrentView('studio');
+                }}
+              />
+            )}
+
+            {currentView === 'api-platform' && <ApiPlatformView />}
+
+            {currentView === 'admin' && (
+              (isAdmin || user?.email === 'ra2826572@gmail.com' || sessionStorage.getItem('vf_admin_unlocked') === 'true') ? (
+                <AdminDashboardView onLock={() => setCurrentView('dashboard')} />
+              ) : (
+                <div className="p-12 text-center text-slate-400">
+                  <h2 className="text-xl font-bold text-rose-400 mb-2">Access Denied</h2>
+                  <p>You do not have permission to view the Administrator Console.</p>
                 </div>
-                <button
-                  onClick={() => setCurrentView('dashboard')}
-                  className="px-6 py-2.5 rounded-xl bg-purple-600 text-white font-bold text-xs cursor-pointer hover:bg-purple-500"
-                >
-                  Return to Dashboard
-                </button>
-              </div>
+              )
+            )}
+
+            {(currentView === 'help' || currentView === 'help-center') && (
+              <HelpCenterView />
             )}
           </main>
         </div>
@@ -322,7 +455,61 @@ const MainAppContent: React.FC = () => {
         isOpen={authModalOpen}
         initialMode={authModalMode}
         onClose={() => setAuthModalOpen(false)}
-        onSuccess={() => setCurrentView('dashboard')}
+        onSuccess={() => {
+          setAuthModalOpen(false);
+          setCurrentView('dashboard');
+          setOnboardingOpen(true);
+        }}
+      />
+
+      {/* AI Assistant Floating Context Modal (Cmd+K) */}
+      <AIAssistantModal
+        isOpen={assistantModalOpen}
+        onClose={() => setAssistantModalOpen(false)}
+        currentScript={studioInitialText}
+        onApplyToCurrentScript={(updated) => {
+          setStudioInitialText(updated);
+          setCanvasKey((prev) => prev + 1);
+        }}
+      />
+
+      {/* Keyboard Shortcuts Guide */}
+      <KeyboardShortcutsModal
+        isOpen={shortcutsModalOpen}
+        onClose={() => setShortcutsModalOpen(false)}
+      />
+
+      {/* Team Workspace Collaborators */}
+      <TeamWorkspaceModal
+        isOpen={teamsModalOpen}
+        onClose={() => setTeamsModalOpen(false)}
+      />
+
+      {/* Share Project Modal */}
+      <ShareProjectModal
+        isOpen={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        projectName={activeShareData.name}
+        projectId={activeShareData.id}
+      />
+
+      {/* New User Onboarding Flow */}
+      <OnboardingModal
+        isOpen={onboardingOpen}
+        onClose={() => setOnboardingOpen(false)}
+        onComplete={(pData) => {
+          setStudioInitialText(pData.script);
+          setCurrentView('studio');
+        }}
+      />
+
+      {/* Admin Password Gate Modal */}
+      <AdminPasswordModal
+        isOpen={adminPasswordModalOpen}
+        onClose={() => setAdminPasswordModalOpen(false)}
+        onSuccess={() => {
+          setCurrentView('admin');
+        }}
       />
     </div>
   );
