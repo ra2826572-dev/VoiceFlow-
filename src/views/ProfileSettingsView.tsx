@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useTheme } from '../context/ThemeContext';
+import { useUsage } from '../context/UsageContext';
 import { UserAvatar } from '../components/UserAvatar';
 import { SUPPORTED_LANGUAGES, VOICES_CATALOG } from '../data/voices';
 import { LanguageCode, PitchLevel } from '../types';
@@ -29,6 +30,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
   onNavigateToPricing,
 }) => {
   const { user, updateProfile, updateAvatar, getInitials } = useAuth();
+  const { usage } = useUsage();
   const { success, error } = useToast();
   const { theme, setTheme } = useTheme();
 
@@ -94,10 +96,9 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
     }
   };
 
-  const characterPercent = Math.min(
-    100,
-    Math.round(((user?.charactersUsed || 14250) / (user?.characterLimit || 100000)) * 100)
-  );
+  const characterPercent = usage?.features.TEXT_TO_VOICE.percentage || 0;
+  const charactersUsed = usage?.features.TEXT_TO_VOICE.used || 0;
+  const characterLimit = usage?.features.TEXT_TO_VOICE.limit || 0;
 
   return (
     <div id="profile-settings-container" className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -192,7 +193,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
           <div className="flex justify-between text-xs text-slate-400">
             <span>Character Allocation Used</span>
             <span className="font-mono text-slate-200">
-              {(user?.charactersUsed || 14250).toLocaleString()} / {(user?.characterLimit || 100000).toLocaleString()}
+              {charactersUsed.toLocaleString()} / {characterLimit.toLocaleString()}
             </span>
           </div>
           <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">

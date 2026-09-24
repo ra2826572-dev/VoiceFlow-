@@ -32,6 +32,8 @@ import {
   Send,
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { useUsage } from '../context/UsageContext';
+import { useAuth } from '../context/AuthContext';
 import {
   ScriptCategory,
   ScriptToolType,
@@ -112,7 +114,9 @@ const TOOLS: ToolDefinition[] = [
 ];
 
 export const WritingStudioView: React.FC<WritingStudioViewProps> = ({ onSendToVoiceStudio }) => {
+  const { user } = useAuth();
   const { success, error } = useToast();
+  const { checkLimit, showLimitModal, refreshUsage } = useUsage();
 
   // Navigation / Workspace View Tabs
   const [activeTab, setActiveTab] = useState<'home' | 'editor' | 'timeline' | 'ideas' | 'documents' | 'chat'>('home');
@@ -197,11 +201,19 @@ export const WritingStudioView: React.FC<WritingStudioViewProps> = ({ onSendToVo
       return;
     }
 
+    if (!checkLimit('AI_WRITING')) {
+      showLimitModal('AI_WRITING');
+      return;
+    }
+
     setIsGenerating(true);
     try {
       const res = await fetch('/api/ai/write', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-email': user?.email || ''
+        },
         body: JSON.stringify({
           toolType: selectedTool.id,
           topic: topicToUse,
@@ -221,7 +233,16 @@ export const WritingStudioView: React.FC<WritingStudioViewProps> = ({ onSendToVo
         setCurrentText(data.text);
         setActiveTab('editor');
         success(`Generated ${selectedTool.name} successfully!`);
+        refreshUsage();
       } else {
+        if (res.status === 403) {
+          const data = await res.json();
+          if (data.code === 'LIMIT_REACHED') {
+            showLimitModal('AI_WRITING');
+            setIsGenerating(false);
+            return;
+          }
+        }
         throw new Error('Generation failed');
       }
     } catch {
@@ -233,11 +254,19 @@ export const WritingStudioView: React.FC<WritingStudioViewProps> = ({ onSendToVo
 
   // AI Rewrite / Quick Actions on editor
   const handleAiAction = async (action: string, customText?: string) => {
+    if (!checkLimit('AI_WRITING')) {
+      showLimitModal('AI_WRITING');
+      return;
+    }
+
     setIsGenerating(true);
     try {
       const res = await fetch('/api/ai/write', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-email': user?.email || ''
+        },
         body: JSON.stringify({
           toolType: selectedTool.id,
           topic: '',
@@ -258,6 +287,17 @@ export const WritingStudioView: React.FC<WritingStudioViewProps> = ({ onSendToVo
           setCurrentText(data.text);
         }
         success(`Applied AI action: ${action}`);
+        refreshUsage();
+      } else {
+        if (res.status === 403) {
+          const data = await res.json();
+          if (data.code === 'LIMIT_REACHED') {
+            showLimitModal('AI_WRITING');
+            setIsGenerating(false);
+            return;
+          }
+        }
+        throw new Error('AI action failed');
       }
     } catch {
       error(`Could not execute AI action: ${action}`);

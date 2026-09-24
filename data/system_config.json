@@ -1,0 +1,19 @@
+{
+  "freeLimits": {
+    "TEXT_TO_VOICE": 5,
+    "VOICE_TO_TEXT": 5,
+    "AI_WRITING": 5,
+    "TRANSLATION": 5,
+    "OTHER_AI": 5
+  },
+  "proLimits": {
+    "TEXT_TO_VOICE": 100,
+    "VOICE_TO_TEXT": 100,
+    "AI_WRITING": 100,
+    "TRANSLATION": 100,
+    "OTHER_AI": 100
+  },
+  "resetPeriod": "monthly",
+  "updatedAt": "2026-09-24T05:34:00.000Z",
+  "updatedBy": "system"
+}

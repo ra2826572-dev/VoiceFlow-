@@ -15,8 +15,12 @@ import {
   Code2,
   HelpCircle,
   ShieldAlert,
+  LogOut,
+  Crown,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useUsage } from '../context/UsageContext';
 import { AdminPasswordModal } from './AdminPasswordModal';
 
 interface SidebarProps {
@@ -32,7 +36,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   className = '',
   onCloseMobile,
 }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const { usage } = useUsage();
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
 
   const sections = [
@@ -165,25 +170,108 @@ export const Sidebar: React.FC<SidebarProps> = ({
         ))}
       </div>
 
-      {/* Pro Badge Card */}
-      <div className="pt-4 px-2">
-        <div className="p-3.5 rounded-2xl bg-gradient-to-br from-purple-950/40 to-slate-900 border border-purple-500/30 space-y-2 text-left">
-          <div className="flex items-center gap-1.5 text-purple-300 font-bold text-xs">
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span>VoiceFlow Studio Pro</span>
+      {/* Usage & Status Card */}
+      <div className="pt-4 px-2 space-y-3">
+        {/* Resource Usage Preview */}
+        {!usage?.isUnlimitedAdmin && (
+          <div className="p-3 rounded-2xl bg-slate-900/60 border border-slate-800/50 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Voice Usage</span>
+              <span className="text-[10px] font-black text-slate-300">
+                {usage?.features.TEXT_TO_VOICE.used}/{usage?.features.TEXT_TO_VOICE.limit}
+              </span>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-1 overflow-hidden">
+              <div 
+                className="bg-purple-600 h-full transition-all duration-500" 
+                style={{ width: `${usage?.features.TEXT_TO_VOICE.percentage || 0}%` }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">AI Writing</span>
+              <span className="text-[10px] font-black text-slate-300">
+                {usage?.features.AI_WRITING.used}/{usage?.features.AI_WRITING.limit}
+              </span>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-1 overflow-hidden">
+              <div 
+                className="bg-emerald-600 h-full transition-all duration-500" 
+                style={{ width: `${usage?.features.AI_WRITING.percentage || 0}%` }}
+              />
+            </div>
           </div>
-          <p className="text-[10px] text-slate-400 leading-tight">
-            Unlimited AI voice cloning, multi-speaker mixing & studio audio.
-          </p>
-          <button
-            onClick={() => onNavigate('billing')}
-            className="w-full py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer"
-          >
-            <span>Upgrade Tier</span>
-            <ChevronRight className="w-3 h-3" />
-          </button>
-        </div>
+        )}
+
+        {usage?.isUnlimitedAdmin && (
+          <div className="p-3 rounded-2xl bg-amber-500/5 border border-amber-500/20 text-center">
+            <span className="text-[10px] font-black text-amber-400 uppercase tracking-[0.2em]">Unlimited Admin Access</span>
+          </div>
+        )}
+
+        {/* Upgrade Card */}
+        {usage?.plan !== 'pro' && !usage?.isUnlimitedAdmin && (
+          <div className="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-950/40 to-slate-900 border border-indigo-500/30 space-y-2 text-left">
+            <div className="flex items-center gap-1.5 text-indigo-300 font-bold text-xs">
+              <Crown className="w-3.5 h-3.5 text-indigo-400" />
+              <span>VoiceFlow Free Tier</span>
+            </div>
+            <p className="text-[10px] text-slate-400 leading-tight">
+              Upgrade to Pro for higher limits, premium voices & priority rendering.
+            </p>
+            <button
+              onClick={() => onNavigate('billing')}
+              className="w-full py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer"
+            >
+              <span>Upgrade to Pro</span>
+              <ChevronRight className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
+        {usage?.plan === 'pro' && (
+          <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-950/40 to-slate-900 border border-emerald-500/30 space-y-2 text-left text-emerald-300">
+            <div className="flex items-center gap-1.5 font-bold text-xs">
+              <Zap className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Pro Member</span>
+            </div>
+            <p className="text-[10px] text-emerald-400/70 leading-tight">
+              Enjoy high-volume limits and elite AI production tools.
+            </p>
+          </div>
+        )}
       </div>
+
+      {/* Logged in User Information */}
+      {user && (
+        <div className="pt-3 px-2">
+          <div className="p-2.5 rounded-xl bg-[#11121a] border border-slate-800 flex items-center justify-between gap-2 shadow-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white text-xs font-black shrink-0">
+                {(user.name || 'U').charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 text-left">
+                <p className="text-xs font-bold text-white truncate leading-tight">
+                  {user.name}
+                </p>
+                <p className="text-[10px] text-purple-400 font-mono font-semibold truncate leading-tight">
+                  @{user.username?.replace(/^@/, '') || 'user'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                logout();
+                onNavigate('login');
+              }}
+              title="Logout"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0 cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Admin Password Verification Modal */}
       <AdminPasswordModal

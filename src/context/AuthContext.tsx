@@ -46,6 +46,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(() => {
     if (typeof window !== 'undefined') {
+      const isSessionActive = sessionStorage.getItem('voiceflow_session_logged_in') === 'true';
+      if (!isSessionActive) {
+        return null;
+      }
       const stored = localStorage.getItem('voiceflow_user');
       if (stored) {
         try {
@@ -61,8 +65,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  // Sync profile from backend if available
+  // Sync profile from backend if available and session is active
   useEffect(() => {
+    const isSessionActive = typeof window !== 'undefined' && sessionStorage.getItem('voiceflow_session_logged_in') === 'true';
+    if (!isSessionActive) return;
+
     const fetchRemoteProfile = async () => {
       try {
         const res = await fetch('/api/profile');
@@ -86,9 +93,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const saveUser = useCallback((updated: UserProfile | null) => {
     setUser(updated);
     if (updated) {
-      localStorage.setItem('voiceflow_user', JSON.stringify(updated));
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('voiceflow_session_logged_in', 'true');
+        localStorage.setItem('voiceflow_user', JSON.stringify(updated));
+        if (updated.username) localStorage.setItem('voiceflow_last_username', updated.username);
+        if (updated.name) localStorage.setItem('voiceflow_last_name', updated.name);
+      }
     } else {
-      localStorage.removeItem('voiceflow_user');
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('voiceflow_session_logged_in');
+        localStorage.removeItem('voiceflow_user');
+      }
     }
   }, []);
 
@@ -109,13 +124,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     username?: string
   ): Promise<boolean> => {
     setIsLoading(true);
+    const cleanUsername = (username || (identifier.includes('@') ? identifier.split('@')[0] : identifier)).replace(/^@/, '');
+    const cleanName = name || cleanUsername;
+
     try {
       const res = await fetch('/api/auth/signin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: identifier, username, password }),
+        body: JSON.stringify({ email: identifier, username: cleanUsername, name: cleanName, password }),
       });
-      let profileData = DEFAULT_USER;
+      let profileData = { ...DEFAULT_USER };
       if (res.ok) {
         const data = await res.json();
         if (data.user) profileData = { ...profileData, ...data.user };
@@ -125,20 +143,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         profileData.email = identifier + '@voiceflow.ai';
       }
-      if (username) profileData.username = username;
-      else if (!profileData.username) profileData.username = identifier.split('@')[0];
-      if (name) profileData.name = name;
+      profileData.username = cleanUsername;
+      profileData.name = cleanName;
       saveUser(profileData);
       setIsLoading(false);
       return true;
     } catch {
       // Local fallback
-      const derivedUsername = username || identifier.split('@')[0];
       const updated: UserProfile = {
         ...(user || DEFAULT_USER),
         email: identifier.includes('@') ? identifier : `${identifier}@voiceflow.ai`,
-        username: derivedUsername,
-        name: name || user?.name || derivedUsername,
+        username: cleanUsername,
+        name: cleanName,
       };
       saveUser(updated);
       setIsLoading(false);

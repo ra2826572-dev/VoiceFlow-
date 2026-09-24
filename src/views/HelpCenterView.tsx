@@ -69,8 +69,8 @@ export const HelpCenterView: React.FC = () => {
       duration: '4 min read',
     },
     {
-      title: 'Multi-Speaker Dialogue Studio',
-      desc: 'Create podcasts and conversational audiobooks with alternating male and female speakers.',
+      title: 'AI Writing & Script Studio',
+      desc: 'Generate YouTube scripts, viral hooks, ad copy, and social posts with tone and style controls.',
       icon: Volume2,
       duration: '5 min read',
     },

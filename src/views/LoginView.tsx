@@ -25,9 +25,13 @@ export const LoginView: React.FC<{ onNavigate: (view: string) => void }> = ({ on
 
   const [mode, setMode] = useState<AuthPageMode>('login');
 
-  // Form Fields
-  const [name, setName] = useState('');
-  const [username, setUsername] = useState('');
+  // Form Fields - Prefill with last remembered name/username for convenience
+  const [name, setName] = useState(() => {
+    return typeof window !== 'undefined' ? (localStorage.getItem('voiceflow_last_name') || 'Rizwan Ahmad') : '';
+  });
+  const [username, setUsername] = useState(() => {
+    return typeof window !== 'undefined' ? (localStorage.getItem('voiceflow_last_username') || 'rizwan_ai') : '';
+  });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -35,27 +39,39 @@ export const LoginView: React.FC<{ onNavigate: (view: string) => void }> = ({ on
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Handle Sign In
+  // Handle Sign In with Name, Username, and Password
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email && !username) {
-      error('Please enter your email or username');
+    if (!name.trim()) {
+      error('Please enter your Full Name (اپنا نام درج کریں)');
+      return;
+    }
+    if (!username.trim()) {
+      error('Please enter your Username (یوزر نیم درج کریں)');
       return;
     }
     if (!password) {
-      error('Please enter your password');
+      error('Please enter your Password (پاس ورڈ درج کریں)');
       return;
     }
     setIsLoading(true);
     try {
-      const identifier = email.trim() || username.trim();
-      const ok = await login(identifier, password, name, username);
+      const cleanUsername = username.trim().replace(/^@/, '');
+      const cleanName = name.trim();
+      const identifier = cleanUsername.includes('@') ? cleanUsername : `${cleanUsername}@voiceflow.ai`;
+      
+      const ok = await login(identifier, password, cleanName, cleanUsername);
       if (ok) {
-        success('Signed in successfully! Welcome to VoiceFlow Studio.');
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('voiceflow_session_logged_in', 'true');
+          localStorage.setItem('voiceflow_last_name', cleanName);
+          localStorage.setItem('voiceflow_last_username', cleanUsername);
+        }
+        success(`Welcome, ${cleanName}! Signed in as @${cleanUsername}`);
         onNavigate('dashboard');
       }
     } catch {
-      error('Failed to sign in.');
+      error('Failed to sign in. Please verify your credentials.');
     } finally {
       setIsLoading(false);
     }
@@ -239,61 +255,79 @@ export const LoginView: React.FC<{ onNavigate: (view: string) => void }> = ({ on
         {/* 1. LOGIN FORM */}
         {mode === 'login' && (
           <form onSubmit={handleSignIn} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">Full Name</label>
-              <div className="relative">
-                <User className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  required
-                  placeholder="Enter your name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full pl-10 pr-3 py-2.5 rounded-xl text-xs bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">Username / Email Address</label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  required
-                  placeholder="username or name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-3 py-2.5 rounded-xl text-xs bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-            </div>
-
+            {/* Field 1: Full Name */}
             <div className="space-y-1.5">
               <div className="flex justify-between items-center">
-                <label className="text-xs font-semibold text-slate-300">Password</label>
+                <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Full Name / اپنا نام</span>
+                </label>
+                <span className="text-[10px] text-purple-400/90 font-medium">Required</span>
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Rizwan Ahmad"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl text-xs bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Field 2: Username */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <span className="text-purple-400 font-bold">@</span>
+                  <span>Username / یوزر نیم</span>
+                </label>
+                <span className="text-[10px] text-purple-400/90 font-medium">Required</span>
+              </div>
+              <div className="relative">
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs font-bold pointer-events-none">
+                  @
+                </div>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. rizwan_ai"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full pl-8 pr-3.5 py-2.5 rounded-xl text-xs bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Field 3: Password */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Password / پاس ورڈ</span>
+                </label>
                 <button
                   type="button"
                   onClick={() => setMode('forgot')}
-                  className="text-[11px] text-purple-400 hover:text-purple-300"
+                  className="text-[11px] text-purple-400 hover:text-purple-300 transition-colors"
                 >
                   Forgot Password?
                 </button>
               </div>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-10 py-2.5 rounded-xl text-xs bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 focus:ring-2 focus:ring-purple-500"
+                  className="w-full pl-3.5 pr-10 py-2.5 rounded-xl text-xs bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -303,9 +337,18 @@ export const LoginView: React.FC<{ onNavigate: (view: string) => void }> = ({ on
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 rounded-2xl font-bold text-xs text-white bg-purple-600 hover:bg-purple-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-600/30 cursor-pointer"
+              className="w-full py-3 rounded-2xl font-bold text-xs text-white bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 hover:from-purple-500 hover:to-indigo-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-600/30 cursor-pointer active:scale-[0.99]"
             >
-              {isLoading ? <RotateCw className="w-4 h-4 animate-spin" /> : 'Sign In'}
+              {isLoading ? (
+                <>
+                  <RotateCw className="w-4 h-4 animate-spin" />
+                  <span>Logging in...</span>
+                </>
+              ) : (
+                <>
+                  <span>Sign In & Open Dashboard →</span>
+                </>
+              )}
             </button>
 
             <div className="text-center pt-2">

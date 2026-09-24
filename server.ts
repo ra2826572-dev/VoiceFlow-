@@ -8,16 +8,6 @@ import { registerDubbingRoutes } from "./server/dubbing";
 
 dotenv.config();
 
-const app = express();
-const PORT = 3000;
-
-// Increase JSON limit for audio base64 payloads
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
-
-// Serve uploaded video and audio files statically
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
-
 // Initialize Gemini Client lazily
 let geminiClient: GoogleGenAI | null = null;
 function getGeminiClient(): GoogleGenAI | null {
@@ -33,6 +23,355 @@ function getGeminiClient(): GoogleGenAI | null {
   }
   return geminiClient;
 }
+
+const app = express();
+const PORT = 3000;
+
+// Increase JSON limit for audio base64 payloads
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+// Serve uploaded video and audio files statically
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
+
+// ==========================================
+// 11. AUTOMATIC USER MANAGEMENT & ADMIN SUITE
+// ==========================================
+
+export type BackendUserRole = 'super_admin' | 'admin' | 'moderator' | 'user';
+
+interface BackendUserProject {
+  id: string;
+  title: string;
+  type: 'audio' | 'video' | 'script' | 'dubbing' | 'clone';
+  duration: number;
+  language?: string;
+  audioUrl?: string;
+  createdAt: string;
+  status: 'completed' | 'processing' | 'flagged' | 'draft';
+}
+
+interface BackendUserActivity {
+  id: string;
+  type:
+    | 'account_created'
+    | 'login'
+    | 'logout'
+    | 'voice_generation'
+    | 'script_generation'
+    | 'audio_export'
+    | 'video_uploaded'
+    | 'video_dubbed'
+    | 'translation_generated'
+    | 'project_created'
+    | 'project_deleted'
+    | 'subscription_change'
+    | 'credit_adjustment'
+    | 'voice_cloning'
+    | 'signup';
+  description: string;
+  timestamp: string;
+  ip?: string;
+  details?: Record<string, any>;
+}
+
+interface BackendManagedUser {
+  id: string;
+  auth_user_id: string;
+  name: string;
+  username?: string;
+  email: string;
+  avatar?: string;
+  role: BackendUserRole;
+  subscription: 'free' | 'creator' | 'pro' | 'business' | 'premium';
+  plan?: 'free' | 'creator' | 'pro' | 'business' | 'premium';
+  subscriptionStatus: 'active' | 'past_due' | 'canceled' | 'trialing';
+  renewalDate: string;
+  credits: number;
+  creditsLimit: number;
+  charactersUsed: number;
+  audioMinutes: number;
+  videoMinutes: number;
+  voiceGenerations: number;
+  aiWritingGenerations: number;
+  dubbingUsageMinutes: number;
+  creditsConsumed: number;
+  status: 'active' | 'suspended' | 'pending';
+  isBanned: boolean;
+  createdAt: string;
+  lastLogin: string;
+  loginCount: number;
+  provider: 'email' | 'google' | 'github' | 'sso';
+  emailVerified: boolean;
+  totalProjects: number;
+  generatedAudios: number;
+  generatedVideos: number;
+  voiceClonesCount?: number;
+  usage?: Record<string, { used: number; limit: number; periodStart: string; periodEnd: string }>;
+  projects: BackendUserProject[];
+  activityLogs: BackendUserActivity[];
+  billingHistory: MockInvoice[];
+}
+
+interface BackendAdminLiveEvent {
+  id: string;
+  type: 'user_signup' | 'subscription_upgrade' | 'voice_created' | 'video_dubbed' | 'credits_purchased' | 'login_alert';
+  title: string;
+  message: string;
+  userId?: string;
+  userName?: string;
+  userEmail?: string;
+  timestamp: string;
+  badgeType?: 'success' | 'info' | 'warning' | 'purple';
+}
+
+interface BackendAuditLog {
+  id: string;
+  adminEmail: string;
+  action: string;
+  targetUserId?: string;
+  targetUserName?: string;
+  details: string;
+  timestamp: string;
+  status: 'success' | 'failed';
+  ip?: string;
+}
+
+// File-based persistent storage for live users & events
+const USERS_DB_PATH = path.join(process.cwd(), 'data', 'users_db.json');
+const PAYMENTS_DB_PATH = path.join(process.cwd(), 'data', 'payment_requests.json');
+const SYSTEM_CONFIG_PATH = path.join(process.cwd(), 'data', 'system_config.json');
+
+export interface SystemLimitsConfig {
+  freeLimits: Record<string, number>;
+  proLimits: Record<string, number>;
+  resetPeriod: 'monthly' | 'weekly';
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+function loadSystemConfig(): SystemLimitsConfig {
+  try {
+    if (fs.existsSync(SYSTEM_CONFIG_PATH)) {
+      const raw = fs.readFileSync(SYSTEM_CONFIG_PATH, 'utf-8');
+      return JSON.parse(raw);
+    }
+  } catch (e) {
+    console.error('Error reading system config:', e);
+  }
+  return {
+    freeLimits: { TEXT_TO_VOICE: 5, VOICE_TO_TEXT: 5, AI_WRITING: 5, TRANSLATION: 5, OTHER_AI: 5 },
+    proLimits: { TEXT_TO_VOICE: 100, VOICE_TO_TEXT: 100, AI_WRITING: 100, TRANSLATION: 100, OTHER_AI: 100 },
+    resetPeriod: 'monthly'
+  };
+}
+
+function saveSystemConfig(config: SystemLimitsConfig) {
+  try {
+    const dir = path.dirname(SYSTEM_CONFIG_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(SYSTEM_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error saving system config:', e);
+  }
+}
+
+let systemLimits = loadSystemConfig();
+
+export interface PaymentRequestRecord {
+  id: string;
+  userId: string;
+  userEmail: string;
+  userName: string;
+  plan: string;
+  planName: string;
+  amount: string;
+  paymentNumber: string;
+  transactionId: string;
+  paymentScreenshot?: string;
+  senderNumber?: string;
+  senderName?: string;
+  paymentMethod?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  adminNote?: string;
+  createdAt: string;
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
+}
+
+function loadPaymentRequestsDb(): PaymentRequestRecord[] {
+  try {
+    if (fs.existsSync(PAYMENTS_DB_PATH)) {
+      const raw = fs.readFileSync(PAYMENTS_DB_PATH, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error('Error reading payment requests DB:', e);
+  }
+  return [];
+}
+
+function savePaymentRequestsDb() {
+  try {
+    const dir = path.dirname(PAYMENTS_DB_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(PAYMENTS_DB_PATH, JSON.stringify(paymentRequests, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Error writing payment requests DB:', e);
+  }
+}
+
+let paymentRequests: PaymentRequestRecord[] = loadPaymentRequestsDb();
+
+function loadUsersDb(): { users: BackendManagedUser[]; events: BackendAdminLiveEvent[]; auditLogs: BackendAuditLog[] } {
+  try {
+    if (fs.existsSync(USERS_DB_PATH)) {
+      const raw = fs.readFileSync(USERS_DB_PATH, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return {
+        users: Array.isArray(parsed.users) ? parsed.users : [],
+        events: Array.isArray(parsed.events) ? parsed.events : [],
+        auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
+      };
+    }
+  } catch (e) {
+    console.error('Error reading users DB:', e);
+  }
+  return { users: [], events: [], auditLogs: [] };
+}
+
+function saveUsersDb() {
+  try {
+    const dir = path.dirname(USERS_DB_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(
+      USERS_DB_PATH,
+      JSON.stringify({ users: managedUsers, events: adminLiveEvents, auditLogs: adminAuditLogs }, null, 2),
+      'utf-8'
+    );
+  } catch (e) {
+    console.error('Error writing users DB:', e);
+  }
+}
+
+// --- USAGE LIMIT ENFORCEMENT SYSTEM ---
+export type FeatureUsageType = 'TEXT_TO_VOICE' | 'VOICE_TO_TEXT' | 'AI_WRITING' | 'TRANSLATION' | 'OTHER_AI';
+
+function checkAndIncrementUsage(user: BackendManagedUser, feature: FeatureUsageType): { allowed: boolean; error?: string; usage?: any } {
+  // ADMIN role bypasses all limits
+  if (user.role === 'admin' || user.role === 'super_admin' || user.email === 'ra2826572@gmail.com') {
+    return { allowed: true };
+  }
+
+  // Initialize usage container if missing
+  if (!user.usage) user.usage = {};
+  
+  const now = new Date();
+  const limits = user.plan === 'pro' ? systemLimits.proLimits : systemLimits.freeLimits;
+  const currentLimit = limits[feature] || 5;
+
+  // Initialize specific feature usage if missing
+  if (!user.usage[feature]) {
+    const periodEnd = new Date();
+    if (systemLimits.resetPeriod === 'monthly') {
+      periodEnd.setMonth(now.getMonth() + 1);
+    } else {
+      periodEnd.setDate(now.getDate() + 7);
+    }
+    
+    user.usage[feature] = {
+      used: 0,
+      limit: currentLimit,
+      periodStart: now.toISOString(),
+      periodEnd: periodEnd.toISOString()
+    };
+  }
+
+  const usage = user.usage[feature];
+
+  // Check for usage reset period expiry
+  if (now > new Date(usage.periodEnd)) {
+    usage.used = 0;
+    usage.periodStart = now.toISOString();
+    const periodEnd = new Date();
+    if (systemLimits.resetPeriod === 'monthly') {
+      periodEnd.setMonth(now.getMonth() + 1);
+    } else {
+      periodEnd.setDate(now.getDate() + 7);
+    }
+    usage.periodEnd = periodEnd.toISOString();
+  }
+
+  // Sync current limit from system config
+  usage.limit = currentLimit;
+
+  // Verify limit
+  if (usage.used >= usage.limit) {
+    return { 
+      allowed: false, 
+      error: 'Free Limit Reached',
+      usage: { ...usage }
+    };
+  }
+
+  // Increment usage
+  usage.used += 1;
+  saveUsersDb();
+
+  return { allowed: true, usage: { ...usage } };
+}
+
+const initialDb = loadUsersDb();
+let managedUsers: BackendManagedUser[] = initialDb.users;
+let adminLiveEvents: BackendAdminLiveEvent[] = initialDb.events;
+let adminAuditLogs: BackendAuditLog[] = initialDb.auditLogs;
+
+function broadcastAdminEvent(
+  type: BackendAdminLiveEvent['type'],
+  title: string,
+  message: string,
+  user?: { id?: string; name?: string; email?: string }
+) {
+  const newEvt: BackendAdminLiveEvent = {
+    id: 'evt-' + Date.now(),
+    type,
+    title,
+    message,
+    userId: user?.id,
+    userName: user?.name,
+    userEmail: user?.email,
+    timestamp: new Date().toISOString(),
+    badgeType: type === 'user_signup' ? 'success' : type === 'subscription_upgrade' ? 'purple' : 'info',
+  };
+  adminLiveEvents.unshift(newEvt);
+  if (adminLiveEvents.length > 50) adminLiveEvents.pop();
+  saveUsersDb();
+}
+
+// Register AI Dubbing Production Pipeline
+registerDubbingRoutes(app, getGeminiClient, (action, details, userId) => {
+  // Deduct credits and update user statistics
+  userProfile.charactersUsed = Math.min(
+    userProfile.characterLimit,
+    userProfile.charactersUsed + 600
+  );
+  userProfile.audioGeneratedMinutes = Math.round((userProfile.audioGeneratedMinutes + 0.5) * 10) / 10;
+  userProfile.conversionsCount += 1;
+
+  creditUsageLogs.unshift({
+    id: "c-" + Date.now(),
+    timestamp: new Date().toISOString(),
+    amount: 600,
+    action: `AI Video Dubbing: ${details}`,
+    type: "debit",
+    balanceAfter: 85550 - 600,
+  });
+});
 
 // In-memory persistent database for conversions and user profiles
 interface ConversionRecord {
@@ -140,6 +479,20 @@ let conversions: ConversionRecord[] = [
 
 // --- API ROUTES ---
 
+// Middleware to find user from headers/session
+const resolveUserMiddleware = (req: any, res: any, next: any) => {
+  const email = (req.headers['x-user-email'] || req.query.email || '').toString().toLowerCase().trim();
+  if (!email) return next();
+  
+  const user = managedUsers.find(u => u.email.toLowerCase() === email);
+  if (user) {
+    req.user = user;
+  }
+  next();
+};
+
+app.use(resolveUserMiddleware);
+
 // Health check
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -150,14 +503,70 @@ app.get("/api/health", (_req, res) => {
 });
 
 // GET /api/profile
-app.get("/api/profile", (_req, res) => {
+app.get("/api/profile", (req, res) => {
+  const userEmail = (
+    (req.headers["x-user-email"] as string) ||
+    (req.query.email as string) ||
+    ""
+  ).toLowerCase().trim();
+
+  // If client passes their email, resolve against real persistent managedUsers
+  if (userEmail && typeof managedUsers !== 'undefined') {
+    const matched = managedUsers.find((u) => u.email.toLowerCase() === userEmail);
+    if (matched) {
+      const profile = {
+        ...userProfile,
+        id: matched.id,
+        name: matched.name,
+        email: matched.email,
+        username: matched.username,
+        subscription: matched.plan || matched.subscription || "free",
+        plan: matched.plan || matched.subscription || "free",
+        subscriptionStatus: matched.subscriptionStatus || "active",
+        renewalDate: matched.renewalDate || null,
+        role: matched.role || "user",
+        charactersUsed: matched.charactersUsed || 0,
+        characterLimit: matched.creditsLimit || (matched.plan === 'pro' || matched.subscription === 'pro' ? 100000 : 15000),
+      };
+      return res.json({ success: true, profile });
+    }
+  }
+
   res.json({ success: true, profile: userProfile });
 });
 
 // PUT /api/profile
 app.put("/api/profile", (req, res) => {
   try {
-    const updates = req.body;
+    const updates = { ...req.body };
+
+    // STRICT SECURITY: Never allow normal users or client-side scripts to elevate plan/role from browser!
+    delete updates.subscription;
+    delete updates.plan;
+    delete updates.subscriptionStatus;
+    delete updates.role;
+    delete updates.characterLimit;
+    delete updates.creditsLimit;
+    delete updates.credits;
+    delete updates.renewalDate;
+
+    const userEmail = (
+      (req.headers["x-user-email"] as string) ||
+      updates.email ||
+      userProfile.email ||
+      ""
+    ).toLowerCase().trim();
+
+    if (userEmail && typeof managedUsers !== 'undefined') {
+      const matched = managedUsers.find((u) => u.email.toLowerCase() === userEmail);
+      if (matched) {
+        if (updates.name) matched.name = updates.name;
+        if (updates.username) matched.username = updates.username;
+        if (updates.avatar) matched.avatar = updates.avatar;
+        if (typeof saveUsersDb === 'function') saveUsersDb();
+      }
+    }
+
     userProfile = {
       ...userProfile,
       ...updates,
@@ -536,9 +945,21 @@ async function fetchStudioSpeechAudio(text: string, langCode: string = "ur"): Pr
 }
 
 // POST /api/tts (Text-to-Speech) - Studio-Grade Human Voice Synthesis
-app.post("/api/tts", async (req, res) => {
+app.post("/api/tts", async (req: any, res) => {
   try {
     const { text, voice, language, speed, pitch, emotion, style } = req.body;
+
+    // USAGE LIMIT CHECK
+    if (req.user) {
+      const usageCheck = checkAndIncrementUsage(req.user, 'TEXT_TO_VOICE');
+      if (!usageCheck.allowed) {
+        return res.status(403).json({ 
+          error: usageCheck.error, 
+          code: 'LIMIT_REACHED', 
+          usage: usageCheck.usage 
+        });
+      }
+    }
 
     if (!text || !text.trim()) {
       return res.status(400).json({ error: "Please provide text to synthesize" });
@@ -648,9 +1069,21 @@ app.post("/api/tts", async (req, res) => {
 });
 
 // POST /api/stt (Speech-to-Text) - Optimized for Ultra-Fast Reply
-app.post("/api/stt", async (req, res) => {
+app.post("/api/stt", async (req: any, res) => {
   try {
     const { audioBase64, mimeType, targetLanguage, language } = req.body;
+
+    // USAGE LIMIT CHECK
+    if (req.user) {
+      const usageCheck = checkAndIncrementUsage(req.user, 'VOICE_TO_TEXT');
+      if (!usageCheck.allowed) {
+        return res.status(403).json({ 
+          error: usageCheck.error, 
+          code: 'LIMIT_REACHED', 
+          usage: usageCheck.usage 
+        });
+      }
+    }
 
     if (!audioBase64) {
       return res.status(400).json({ error: "Audio data is required for transcription" });
@@ -733,54 +1166,6 @@ app.post("/api/stt", async (req, res) => {
       error: err.message || "Failed to transcribe audio",
     });
   }
-});
-
-// Authentication endpoints (mock + persistent session simulation)
-app.post("/api/auth/signin", (req, res) => {
-  const { email } = req.body;
-  if (!email) {
-    return res.status(400).json({ error: "Email is required" });
-  }
-
-  // Update profile email if matches
-  userProfile.email = email;
-  res.json({
-    success: true,
-    user: userProfile,
-    token: "mock-jwt-token-" + Date.now(),
-  });
-});
-
-app.post("/api/auth/signup", (req, res) => {
-  const { name, email } = req.body;
-  if (!name || !email) {
-    return res.status(400).json({ error: "Name and email are required" });
-  }
-
-  userProfile.name = name;
-  userProfile.email = email;
-  userProfile.avatar = ""; // Will trigger initials avatar
-  userProfile.createdAt = new Date().toISOString();
-
-  res.json({
-    success: true,
-    user: userProfile,
-    token: "mock-jwt-token-" + Date.now(),
-  });
-});
-
-app.post("/api/auth/google", (req, res) => {
-  // Simulates instant Google Single Sign-On
-  const { email, name, avatar } = req.body;
-  userProfile.email = email || "user.google@gmail.com";
-  userProfile.name = name || "Google User";
-  if (avatar) userProfile.avatar = avatar;
-
-  res.json({
-    success: true,
-    user: userProfile,
-    token: "google-token-" + Date.now(),
-  });
 });
 
 // --- CLONED VOICES STORE & API ---
@@ -1199,7 +1584,7 @@ let writingAnalytics = {
 };
 
 // 1. Comprehensive AI Write / Rewrite Endpoint
-app.post("/api/ai/write", async (req, res) => {
+app.post("/api/ai/write", async (req: any, res) => {
   try {
     const {
       toolType = "youtube",
@@ -1214,6 +1599,18 @@ app.post("/api/ai/write", async (req, res) => {
       seoKeywords = "",
       customInstructions = "",
     } = req.body;
+
+    // USAGE LIMIT CHECK
+    if (req.user) {
+      const usageCheck = checkAndIncrementUsage(req.user, 'AI_WRITING');
+      if (!usageCheck.allowed) {
+        return res.status(403).json({ 
+          error: usageCheck.error, 
+          code: 'LIMIT_REACHED', 
+          usage: usageCheck.usage 
+        });
+      }
+    }
 
     if (!topic && !currentText) {
       return res.status(400).json({ error: "Topic or source text is required" });
@@ -2036,9 +2433,22 @@ ${text.trim()}
 }
 
 // POST /api/translate & POST /api/ai/translate
-const handleTranslationRequest = async (req: express.Request, res: express.Response) => {
+const handleTranslationRequest = async (req: any, res: express.Response) => {
   try {
     const { text, sourceLanguage, targetLanguage } = req.body;
+
+    // USAGE LIMIT CHECK
+    if (req.user) {
+      const usageCheck = checkAndIncrementUsage(req.user, 'TRANSLATION');
+      if (!usageCheck.allowed) {
+        return res.status(403).json({ 
+          error: usageCheck.error, 
+          code: 'LIMIT_REACHED', 
+          usage: usageCheck.usage 
+        });
+      }
+    }
+
     if (!text || !text.trim()) {
       return res.status(400).json({ error: "Please enter text to translate." });
     }
@@ -2138,7 +2548,7 @@ app.delete("/api/translation/history/:id", (req, res) => {
 // ==========================================
 // 9. AI ASSISTANT CONTEXT-AWARE BACKEND
 // ==========================================
-app.post("/api/ai/assistant", async (req, res) => {
+app.post("/api/ai/assistant", async (req: any, res) => {
   try {
     const {
       prompt,
@@ -2148,6 +2558,18 @@ app.post("/api/ai/assistant", async (req, res) => {
       language,
       speakResponse,
     } = req.body;
+
+    // USAGE LIMIT CHECK
+    if (req.user) {
+      const usageCheck = checkAndIncrementUsage(req.user, 'OTHER_AI');
+      if (!usageCheck.allowed) {
+        return res.status(403).json({ 
+          error: usageCheck.error, 
+          code: 'LIMIT_REACHED', 
+          usage: usageCheck.usage 
+        });
+      }
+    }
 
     if (!prompt && !action) {
       return res.status(400).json({ error: "Prompt or action is required" });
@@ -2310,48 +2732,12 @@ app.get("/api/billing/details", (_req, res) => {
   });
 });
 
-app.post("/api/billing/create-checkout", (req, res) => {
-  try {
-    const { tier, cycle } = req.body;
-    // Secure server-side validation, never exposing secrets to frontend
-    const validTiers: Record<string, { monthly: number; annual: number; chars: number; mins: number }> = {
-      free: { monthly: 0, annual: 0, chars: 10000, mins: 15 },
-      pro: { monthly: 29, annual: 290, chars: 100000, mins: 120 },
-      premium: { monthly: 79, annual: 790, chars: 500000, mins: 600 },
-    };
-
-    if (!validTiers[tier]) {
-      return res.status(400).json({ error: "Invalid subscription tier requested" });
-    }
-
-    // Apply subscription to user
-    userProfile.subscription = tier as any;
-    userProfile.characterLimit = validTiers[tier].chars;
-    userProfile.audioMinutesLimit = validTiers[tier].mins;
-
-    // Generate new mock invoice
-    const newInv: MockInvoice = {
-      id: "inv-" + Date.now(),
-      invoiceNumber: `INV-2026-${Math.floor(100 + Math.random() * 900)}`,
-      date: new Date().toISOString().split("T")[0],
-      amount: cycle === "annual" ? validTiers[tier].annual : validTiers[tier].monthly,
-      tier,
-      period: cycle || "monthly",
-      status: "paid",
-      receiptUrl: "#",
-    };
-    invoices.unshift(newInv);
-
-    res.json({
-      success: true,
-      message: `Successfully upgraded to ${tier.toUpperCase()} plan!`,
-      checkoutUrl: `/billing?session_id=mock_${Date.now()}`,
-      user: userProfile,
-      invoice: newInv,
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || "Failed to process checkout" });
-  }
+app.post("/api/billing/create-checkout", (_req, res) => {
+  return res.status(400).json({
+    error: "Automatic checkout is disabled. VoiceFlow Studio requires manual payment and Admin approval.",
+    code: "MANUAL_PAYMENT_REQUIRED",
+    paymentNumber: "03095793662",
+  });
 });
 
 app.post("/api/billing/add-credits", (req, res) => {
@@ -2368,211 +2754,6 @@ app.post("/api/billing/add-credits", (req, res) => {
   res.json({ success: true, message: `Added ${amount.toLocaleString()} credits!`, user: userProfile });
 });
 
-// ==========================================
-// 11. AUTOMATIC USER MANAGEMENT & ADMIN SUITE
-// ==========================================
-
-export type BackendUserRole = 'super_admin' | 'admin' | 'moderator' | 'user';
-
-interface BackendUserProject {
-  id: string;
-  title: string;
-  type: 'audio' | 'video' | 'script' | 'dubbing' | 'clone';
-  duration: number;
-  language?: string;
-  audioUrl?: string;
-  createdAt: string;
-  status: 'completed' | 'processing' | 'flagged' | 'draft';
-}
-
-interface BackendUserActivity {
-  id: string;
-  type:
-    | 'account_created'
-    | 'login'
-    | 'logout'
-    | 'voice_generation'
-    | 'script_generation'
-    | 'audio_export'
-    | 'video_uploaded'
-    | 'video_dubbed'
-    | 'translation_generated'
-    | 'project_created'
-    | 'project_deleted'
-    | 'subscription_change'
-    | 'credit_adjustment'
-    | 'voice_cloning'
-    | 'signup';
-  description: string;
-  timestamp: string;
-  ip?: string;
-  details?: Record<string, any>;
-}
-
-interface BackendManagedUser {
-  id: string;
-  auth_user_id: string;
-  name: string;
-  username?: string;
-  email: string;
-  avatar?: string;
-  role: BackendUserRole;
-  subscription: 'free' | 'creator' | 'pro' | 'business' | 'premium';
-  plan?: 'free' | 'creator' | 'pro' | 'business' | 'premium';
-  subscriptionStatus: 'active' | 'past_due' | 'canceled' | 'trialing';
-  renewalDate: string;
-  credits: number;
-  creditsLimit: number;
-  charactersUsed: number;
-  audioMinutes: number;
-  videoMinutes: number;
-  voiceGenerations: number;
-  aiWritingGenerations: number;
-  dubbingUsageMinutes: number;
-  creditsConsumed: number;
-  status: 'active' | 'suspended' | 'pending';
-  isBanned: boolean;
-  createdAt: string;
-  lastLogin: string;
-  loginCount: number;
-  provider: 'email' | 'google' | 'github' | 'sso';
-  emailVerified: boolean;
-  totalProjects: number;
-  generatedAudios: number;
-  generatedVideos: number;
-  voiceClonesCount?: number;
-  projects: BackendUserProject[];
-  activityLogs: BackendUserActivity[];
-  billingHistory: MockInvoice[];
-}
-
-interface BackendAdminLiveEvent {
-  id: string;
-  type: 'user_signup' | 'subscription_upgrade' | 'voice_created' | 'video_dubbed' | 'credits_purchased' | 'login_alert';
-  title: string;
-  message: string;
-  userId?: string;
-  userName?: string;
-  userEmail?: string;
-  timestamp: string;
-  badgeType?: 'success' | 'info' | 'warning' | 'purple';
-}
-
-interface BackendAuditLog {
-  id: string;
-  adminEmail: string;
-  action: string;
-  targetUserId?: string;
-  targetUserName?: string;
-  details: string;
-  timestamp: string;
-  status: 'success' | 'failed';
-  ip?: string;
-}
-
-// File-based persistent storage for live users & events
-const USERS_DB_PATH = path.join(process.cwd(), 'data', 'users_db.json');
-
-function loadUsersDb(): { users: BackendManagedUser[]; events: BackendAdminLiveEvent[]; auditLogs: BackendAuditLog[] } {
-  try {
-    if (fs.existsSync(USERS_DB_PATH)) {
-      const raw = fs.readFileSync(USERS_DB_PATH, 'utf-8');
-      const parsed = JSON.parse(raw);
-      return {
-        users: Array.isArray(parsed.users) ? parsed.users : [],
-        events: Array.isArray(parsed.events) ? parsed.events : [],
-        auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
-      };
-    }
-  } catch (e) {
-    console.error('Error reading users DB:', e);
-  }
-  return { users: [], events: [], auditLogs: [] };
-}
-
-function saveUsersDb() {
-  try {
-    const dir = path.dirname(USERS_DB_PATH);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(
-      USERS_DB_PATH,
-      JSON.stringify({ users: managedUsers, events: adminLiveEvents, auditLogs: adminAuditLogs }, null, 2),
-      'utf-8'
-    );
-  } catch (e) {
-    console.error('Error writing users DB:', e);
-  }
-}
-
-const initialDb = loadUsersDb();
-let managedUsers: BackendManagedUser[] = initialDb.users;
-let adminLiveEvents: BackendAdminLiveEvent[] = initialDb.events;
-let adminAuditLogs: BackendAuditLog[] = initialDb.auditLogs;
-
-function broadcastAdminEvent(
-  type: BackendAdminLiveEvent['type'],
-  title: string,
-  message: string,
-  user?: { id?: string; name?: string; email?: string }
-) {
-  const newEvt: BackendAdminLiveEvent = {
-    id: 'evt-' + Date.now(),
-    type,
-    title,
-    message,
-    userId: user?.id,
-    userName: user?.name,
-    userEmail: user?.email,
-    timestamp: new Date().toISOString(),
-    badgeType: type === 'user_signup' ? 'success' : type === 'subscription_upgrade' ? 'purple' : 'info',
-  };
-  adminLiveEvents.unshift(newEvt);
-  if (adminLiveEvents.length > 50) adminLiveEvents.pop();
-  saveUsersDb();
-}
-
-// Register AI Dubbing Production Pipeline
-registerDubbingRoutes(app, getGeminiClient, (action, details, userId) => {
-  // Deduct credits and update user statistics
-  userProfile.charactersUsed = Math.min(
-    userProfile.characterLimit,
-    userProfile.charactersUsed + 600
-  );
-  userProfile.audioGeneratedMinutes = Math.round((userProfile.audioGeneratedMinutes + 0.5) * 10) / 10;
-  userProfile.conversionsCount += 1;
-
-  creditUsageLogs.unshift({
-    id: "c-" + Date.now(),
-    timestamp: new Date().toISOString(),
-    amount: 600,
-    action: `AI Video Dubbing: ${details}`,
-    type: "debit",
-    balanceAfter: Math.max(0, userProfile.characterLimit - userProfile.charactersUsed),
-  });
-
-  // Find user in managed users and update
-  const matchedUser = managedUsers.find((u) => u.id === userId || u.auth_user_id === userId);
-  if (matchedUser) {
-    matchedUser.generatedVideos = (matchedUser.generatedVideos || 0) + 1;
-    matchedUser.activityLogs.unshift({
-      id: "act-" + Date.now(),
-      type: "video_dubbed",
-      description: `AI Video Dubbed: ${details}`,
-      timestamp: new Date().toISOString(),
-    });
-    saveUsersDb();
-  }
-
-  // Broadcast to Admin live event feed
-  broadcastAdminEvent(
-    'video_dubbed',
-    'AI Video Dubbed Successfully',
-    details,
-    matchedUser ? { id: matchedUser.id, name: matchedUser.name, email: matchedUser.email } : { id: userProfile.id, name: userProfile.name, email: userProfile.email }
-  );
-});
 
 // --- AUTHENTICATION & AUTOMATIC USER REGISTRATION BACKEND ---
 
@@ -2620,8 +2801,8 @@ app.post('/api/auth/signup', (req, res) => {
       email: cleanEmail,
       avatar: '',
       role: 'user', // STRICT SECURITY RULE: Default role for all registrations
-      subscription: plan as any,
-      plan: plan as any,
+      subscription: 'free', // STRICT SECURITY RULE: User must start on FREE plan until manual payment approval
+      plan: 'free',
       subscriptionStatus: 'active',
       renewalDate: '2026-04-23',
       credits: initialCredits,
@@ -3302,6 +3483,153 @@ app.get('/api/admin/users/:id', requireAdminRole, (req, res) => {
   res.json({ success: true, user });
 });
 
+// GET /api/admin/system/limits - FETCH GLOBAL USAGE LIMITS
+app.get('/api/admin/system/limits', requireAdminRole, (req, res) => {
+  res.json({ success: true, limits: systemLimits });
+});
+
+// POST /api/admin/system/limits - UPDATE GLOBAL USAGE LIMITS
+app.post('/api/admin/system/limits', requireAdminRole, (req, res) => {
+  const { freeLimits, proLimits, resetPeriod, adminEmail } = req.body;
+  
+  if (freeLimits) systemLimits.freeLimits = { ...systemLimits.freeLimits, ...freeLimits };
+  if (proLimits) systemLimits.proLimits = { ...systemLimits.proLimits, ...proLimits };
+  if (resetPeriod) systemLimits.resetPeriod = resetPeriod;
+  
+  systemLimits.updatedAt = new Date().toISOString();
+  systemLimits.updatedBy = adminEmail || 'admin';
+  
+  saveSystemConfig(systemLimits);
+  
+  adminAuditLogs.unshift({
+    id: 'audit-' + Date.now(),
+    adminEmail: adminEmail || 'ra2826572@gmail.com',
+    action: 'SYSTEM_LIMITS_UPDATED',
+    details: `Updated global usage limits. Reset period: ${systemLimits.resetPeriod}.`,
+    timestamp: new Date().toISOString(),
+    status: 'success',
+  });
+  
+  res.json({ success: true, limits: systemLimits });
+});
+
+// GET /api/admin/usage/overview - USAGE ANALYTICS FOR ADMIN
+app.get('/api/admin/usage/overview', requireAdminRole, (req, res) => {
+  const totalUsers = managedUsers.length;
+  const freeUsers = managedUsers.filter(u => u.plan === 'free').length;
+  const proUsers = managedUsers.filter(u => u.plan === 'pro').length;
+  const adminUsers = managedUsers.filter(u => u.role === 'admin' || u.role === 'super_admin').length;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const usageToday = managedUsers.reduce((sum, u) => {
+    if (!u.usage) return sum;
+    let userSum = 0;
+    Object.values(u.usage).forEach((f: any) => {
+      const lastUpdate = new Date(f.updatedAt || f.periodStart);
+      if (lastUpdate >= today) {
+        userSum += f.used;
+      }
+    });
+    return sum + userSum;
+  }, 0);
+
+  const featureTotals: Record<string, number> = {
+    TEXT_TO_VOICE: 0,
+    VOICE_TO_TEXT: 0,
+    AI_WRITING: 0,
+    TRANSLATION: 0,
+    OTHER_AI: 0
+  };
+
+  managedUsers.forEach(u => {
+    if (!u.usage) return;
+    Object.keys(featureTotals).forEach(feat => {
+      if (u.usage && u.usage[feat]) {
+        featureTotals[feat] += u.usage[feat].used;
+      }
+    });
+  });
+
+  const pendingUpgradeRequests = paymentRequests.filter(r => r.status === 'PENDING').length;
+
+  res.json({
+    success: true,
+    overview: {
+      totalUsers,
+      freeUsers,
+      proUsers,
+      adminUsers,
+      usageToday,
+      pendingUpgradeRequests,
+      featureTotals
+    }
+  });
+});
+
+// GET /api/usage/my-status - FETCH AUTHENTICATED USER'S USAGE SUMMARY
+app.get('/api/usage/my-status', (req: any, res) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const user: BackendManagedUser = req.user;
+  const features: Record<string, any> = {};
+  const featureList: FeatureUsageType[] = ['TEXT_TO_VOICE', 'VOICE_TO_TEXT', 'AI_WRITING', 'TRANSLATION', 'OTHER_AI'];
+  
+  const featureNames: Record<string, string> = {
+    TEXT_TO_VOICE: 'AI Voice Generations',
+    VOICE_TO_TEXT: 'Transcription Tasks',
+    AI_WRITING: 'AI Writing Pieces',
+    TRANSLATION: 'Translations Performed',
+    OTHER_AI: 'Assistant Operations'
+  };
+
+  const isUnlimitedAdmin = user.role === 'admin' || user.role === 'super_admin' || user.email === 'ra2826572@gmail.com';
+
+  featureList.forEach(feat => {
+    const limits = user.plan === 'pro' ? systemLimits.proLimits : systemLimits.freeLimits;
+    const currentLimit = limits[feat] || 5;
+    
+    let used = 0;
+    let periodStart = user.createdAt;
+    let periodEnd = new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString();
+
+    if (user.usage && user.usage[feat]) {
+      used = user.usage[feat].used;
+      periodStart = user.usage[feat].periodStart;
+      periodEnd = user.usage[feat].periodEnd;
+    }
+
+    features[feat] = {
+      feature: feat,
+      featureName: featureNames[feat],
+      used: isUnlimitedAdmin ? 0 : used,
+      limit: currentLimit,
+      remaining: isUnlimitedAdmin ? Infinity : Math.max(0, currentLimit - used),
+      isUnlimited: isUnlimitedAdmin,
+      percentage: isUnlimitedAdmin ? 0 : Math.min(100, Math.round((used / currentLimit) * 100))
+    };
+  });
+
+  res.json({
+    success: true,
+    summary: {
+      userId: user.id,
+      userEmail: user.email,
+      userName: user.name,
+      role: user.role,
+      plan: user.plan || user.subscription,
+      subscriptionStatus: user.subscriptionStatus,
+      periodStart: features['TEXT_TO_VOICE'].periodStart,
+      periodEnd: features['TEXT_TO_VOICE'].periodEnd,
+      isUnlimitedAdmin,
+      features
+    }
+  });
+});
+
 // PUT /api/admin/users/:id - EDIT USER
 app.put('/api/admin/users/:id', requireAdminRole, (req, res) => {
   const { id } = req.params;
@@ -3580,6 +3908,317 @@ app.get('/api/admin/export-csv', requireAdminRole, (_req, res) => {
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename=voiceflow_users_export.csv');
   res.send(csvContent);
+});
+
+// =========================================================================
+// 11B. MANUAL PAYMENT + ADMIN APPROVAL SUBSCRIPTION BACKEND SYSTEM
+// =========================================================================
+
+// POST /api/payments/request - USER SUBMITS MANUAL PAYMENT REQUEST
+app.post('/api/payments/request', (req, res) => {
+  try {
+    const {
+      userId,
+      userEmail,
+      userName,
+      plan = 'pro',
+      planName = 'Pro Creator',
+      amount = 'PKR 2,500',
+      paymentNumber = '03095793662',
+      transactionId,
+      paymentScreenshot,
+      senderNumber = '',
+      senderName = '',
+      paymentMethod = 'Easypaisa / JazzCash / Mobile Payment',
+    } = req.body;
+
+    if (!userEmail || !userEmail.trim()) {
+      return res.status(400).json({ error: 'User email is required' });
+    }
+    if (!transactionId || !transactionId.trim()) {
+      return res.status(400).json({ error: 'Transaction ID is required' });
+    }
+
+    const cleanEmail = userEmail.trim().toLowerCase();
+    const cleanTid = transactionId.trim();
+
+    // Check if there is already a PENDING request with this exact transaction ID
+    const duplicate = paymentRequests.find(
+      (r) => r.transactionId.toLowerCase() === cleanTid.toLowerCase() && r.status === 'PENDING'
+    );
+    if (duplicate) {
+      return res.status(400).json({
+        error: 'A payment request with this Transaction ID is already pending review.',
+      });
+    }
+
+    const newRequest: PaymentRequestRecord = {
+      id: 'pay-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
+      userId: userId || 'u-' + Date.now(),
+      userEmail: cleanEmail,
+      userName: userName || cleanEmail.split('@')[0],
+      plan,
+      planName,
+      amount,
+      paymentNumber: paymentNumber || '03095793662',
+      transactionId: cleanTid,
+      paymentScreenshot: paymentScreenshot || '',
+      senderNumber: senderNumber.trim(),
+      senderName: senderName.trim(),
+      paymentMethod,
+      status: 'PENDING',
+      adminNote: '',
+      createdAt: new Date().toISOString(),
+      reviewedAt: null,
+      reviewedBy: null,
+    };
+
+    paymentRequests.unshift(newRequest);
+    savePaymentRequestsDb();
+
+    // Strictly DO NOT automatically mark user as PRO
+    // Update user in managedUsers to note pending review
+    const matchedUser = managedUsers.find((u) => u.email.toLowerCase() === cleanEmail);
+    if (matchedUser) {
+      matchedUser.subscriptionStatus = 'trialing'; // pending review marker
+      matchedUser.activityLogs.unshift({
+        id: 'act-' + Date.now(),
+        type: 'subscription_change',
+        description: `Submitted manual payment of ${amount} for ${planName} (Trx ID: ${cleanTid}). Status: PENDING review by Admin.`,
+        timestamp: new Date().toISOString(),
+      });
+      saveUsersDb();
+    }
+
+    // Broadcast to Admin real-time event feed
+    broadcastAdminEvent(
+      'subscription_upgrade',
+      '💰 New Payment Request Submitted',
+      `${userName || cleanEmail} submitted manual payment proof of ${amount} (Trx ID: ${cleanTid}) for ${planName}. Pending Admin approval.`,
+      { id: userId, name: userName, email: cleanEmail }
+    );
+
+    return res.json({
+      success: true,
+      message: 'Payment submitted successfully. Your payment will be reviewed by Admin.',
+      status: 'PENDING',
+      paymentRequest: newRequest,
+    });
+  } catch (err: any) {
+    console.error('Error submitting payment request:', err);
+    return res.status(500).json({ error: err.message || 'Failed to submit payment request' });
+  }
+});
+
+// GET /api/payments/my-status - FETCH AUTHENTICATED USER'S PAYMENT & SUBSCRIPTION STATUS
+app.get('/api/payments/my-status', (req, res) => {
+  const userEmail = (
+    (req.headers['x-user-email'] as string) ||
+    (req.query.email as string) ||
+    ''
+  ).toLowerCase().trim();
+
+  if (!userEmail) {
+    return res.json({
+      success: true,
+      request: null,
+      history: [],
+      currentPlan: 'free',
+      subscriptionStatus: 'active',
+      renewalDate: null,
+    });
+  }
+
+  const userRequests = paymentRequests.filter(
+    (r) => r.userEmail.toLowerCase() === userEmail
+  );
+  const latestRequest = userRequests.length > 0 ? userRequests[0] : null;
+
+  const matchedUser = managedUsers.find((u) => u.email.toLowerCase() === userEmail);
+  const currentPlan = matchedUser?.plan || matchedUser?.subscription || (userProfile.email.toLowerCase() === userEmail ? userProfile.subscription : 'free');
+  const subscriptionStatus = matchedUser?.subscriptionStatus || 'active';
+  const renewalDate = matchedUser?.renewalDate || null;
+
+  return res.json({
+    success: true,
+    request: latestRequest,
+    history: userRequests,
+    currentPlan,
+    subscriptionStatus,
+    renewalDate,
+  });
+});
+
+// GET /api/admin/payments - ADMIN LISTS ALL PAYMENT REQUESTS
+app.get('/api/admin/payments', requireAdminRole, (req, res) => {
+  const { status, search } = req.query;
+  let list = [...paymentRequests];
+
+  if (status && status !== 'all') {
+    list = list.filter((r) => r.status === String(status).toUpperCase());
+  }
+
+  if (search) {
+    const q = String(search).toLowerCase().trim();
+    list = list.filter(
+      (r) =>
+        r.userName.toLowerCase().includes(q) ||
+        r.userEmail.toLowerCase().includes(q) ||
+        r.transactionId.toLowerCase().includes(q) ||
+        (r.senderNumber && r.senderNumber.includes(q)) ||
+        (r.senderName && r.senderName.toLowerCase().includes(q))
+    );
+  }
+
+  return res.json({
+    success: true,
+    paymentRequests: list,
+    pendingCount: paymentRequests.filter((r) => r.status === 'PENDING').length,
+    approvedCount: paymentRequests.filter((r) => r.status === 'APPROVED').length,
+    rejectedCount: paymentRequests.filter((r) => r.status === 'REJECTED').length,
+    total: paymentRequests.length,
+  });
+});
+
+// POST /api/admin/payments/:id/approve - ADMIN APPROVES PAYMENT & ACTIVATES PRO PLAN
+app.post('/api/admin/payments/:id/approve', requireAdminRole, (req, res) => {
+  const { id } = req.params;
+  const { adminEmail = 'ra2826572@gmail.com', adminNote = '' } = req.body;
+
+  const paymentReq = paymentRequests.find((r) => r.id === id);
+  if (!paymentReq) {
+    return res.status(404).json({ error: 'Payment request not found' });
+  }
+
+  // 1. Verify the payment manually
+  // 2. Change payment request status to APPROVED
+  paymentReq.status = 'APPROVED';
+  paymentReq.reviewedAt = new Date().toISOString();
+  paymentReq.reviewedBy = adminEmail || 'ra2826572@gmail.com';
+  if (adminNote) paymentReq.adminNote = adminNote;
+  savePaymentRequestsDb();
+
+  // 3. Change user's plan from FREE to PRO
+  // 4. Set subscription status to ACTIVE
+  // 5. Set appropriate Pro access/expiry date (30 days from approval)
+  const expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const user = managedUsers.find((u) => u.email.toLowerCase() === paymentReq.userEmail.toLowerCase());
+  if (user) {
+    user.plan = 'pro';
+    user.subscription = 'pro';
+    user.subscriptionStatus = 'active';
+    user.creditsLimit = 100000;
+    user.credits = Math.max(user.credits, 100000);
+    user.renewalDate = expiryDate;
+    user.activityLogs.unshift({
+      id: 'act-' + Date.now(),
+      type: 'subscription_change',
+      description: `Payment of ${paymentReq.amount} (Trx ID: ${paymentReq.transactionId}) verified and APPROVED by Admin (${paymentReq.reviewedBy}). Pro plan activated until ${expiryDate}!`,
+      timestamp: new Date().toISOString(),
+    });
+    user.billingHistory.unshift({
+      id: 'inv-' + Date.now(),
+      invoiceNumber: 'VF-PAY-' + Math.floor(100000 + Math.random() * 900000),
+      date: new Date().toISOString().split('T')[0],
+      amount: typeof paymentReq.amount === 'string' && paymentReq.amount.includes('2,500') ? 29 : 29,
+      tier: 'pro',
+      period: 'monthly',
+      status: 'paid',
+      receiptUrl: '#',
+    });
+    saveUsersDb();
+  }
+
+  // If matching current userProfile in memory, update it as well
+  if (userProfile.email.toLowerCase() === paymentReq.userEmail.toLowerCase()) {
+    userProfile.subscription = 'pro';
+    userProfile.characterLimit = 100000;
+  }
+
+  // Record Audit Log
+  adminAuditLogs.unshift({
+    id: 'audit-' + Date.now(),
+    adminEmail,
+    action: 'MANUAL_PAYMENT_APPROVED',
+    targetUserId: paymentReq.userId,
+    targetUserName: paymentReq.userName,
+    details: `Admin approved payment ${paymentReq.id} for ${paymentReq.userEmail}. Amount: ${paymentReq.amount}, TID: ${paymentReq.transactionId}. User upgraded to PRO plan until ${expiryDate}.`,
+    timestamp: new Date().toISOString(),
+    status: 'success',
+  });
+  saveUsersDb();
+
+  // Broadcast event
+  broadcastAdminEvent(
+    'subscription_upgrade',
+    '✅ Payment Approved & Pro Activated',
+    `Admin approved manual payment for ${paymentReq.userName} (${paymentReq.userEmail}). Pro plan is now active.`,
+    { id: paymentReq.userId, name: paymentReq.userName, email: paymentReq.userEmail }
+  );
+
+  return res.json({
+    success: true,
+    message: 'Payment approved. Your Pro plan is now active.',
+    paymentRequest: paymentReq,
+    user: user || null,
+  });
+});
+
+// POST /api/admin/payments/:id/reject - ADMIN REJECTS PAYMENT (USER REMAINS FREE)
+app.post('/api/admin/payments/:id/reject', requireAdminRole, (req, res) => {
+  const { id } = req.params;
+  const {
+    adminEmail = 'ra2826572@gmail.com',
+    reason = 'Transaction ID not verified or payment not received.',
+  } = req.body;
+
+  const paymentReq = paymentRequests.find((r) => r.id === id);
+  if (!paymentReq) {
+    return res.status(404).json({ error: 'Payment request not found' });
+  }
+
+  // Set status to REJECTED & record optional rejection reason
+  paymentReq.status = 'REJECTED';
+  paymentReq.reviewedAt = new Date().toISOString();
+  paymentReq.reviewedBy = adminEmail || 'ra2826572@gmail.com';
+  paymentReq.adminNote = reason || 'Payment could not be verified in bank records.';
+  savePaymentRequestsDb();
+
+  // User strictly REMAINS FREE
+  const user = managedUsers.find((u) => u.email.toLowerCase() === paymentReq.userEmail.toLowerCase());
+  if (user) {
+    user.plan = 'free';
+    user.subscription = 'free';
+    user.subscriptionStatus = 'active'; // active on free tier
+    user.activityLogs.unshift({
+      id: 'act-' + Date.now(),
+      type: 'subscription_change',
+      description: `Payment request (Trx ID: ${paymentReq.transactionId}) was REJECTED by Admin. Reason: ${paymentReq.adminNote}`,
+      timestamp: new Date().toISOString(),
+    });
+    saveUsersDb();
+  }
+
+  // Audit log
+  adminAuditLogs.unshift({
+    id: 'audit-' + Date.now(),
+    adminEmail,
+    action: 'MANUAL_PAYMENT_REJECTED',
+    targetUserId: paymentReq.userId,
+    targetUserName: paymentReq.userName,
+    details: `Admin rejected payment request (TID: ${paymentReq.transactionId}) for ${paymentReq.userEmail}. Reason: ${paymentReq.adminNote}`,
+    timestamp: new Date().toISOString(),
+    status: 'success',
+  });
+  saveUsersDb();
+
+  return res.json({
+    success: true,
+    message: 'Payment request rejected. User remains on Free plan.',
+    paymentRequest: paymentReq,
+    reason: paymentReq.adminNote,
+  });
 });
 
 // ==========================================

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useUsage } from '../context/UsageContext';
 import { ConversionItem } from '../types';
 import {
   Sparkles,
@@ -34,6 +35,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNewCanvas,
 }) => {
   const { user } = useAuth();
+  const { usage } = useUsage();
   const safeConversions = Array.isArray(conversions) ? conversions : [];
 
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -46,6 +48,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   else if (hour >= 17 || hour < 4) timeGreeting = 'Good evening';
 
   const userName = user?.name || 'Rizwan Ahmad';
+  const userHandle = user?.username ? `@${user.username.replace(/^@/, '')}` : '@rizwan_ai';
 
   // Stats matching screenshot & synchronized with user profile
   const charactersUsed = user?.charactersUsed ?? 14874;
@@ -93,16 +96,28 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="absolute right-0 -bottom-8 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 space-y-3">
-          {/* Active Session Pill */}
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-purple-950/80 text-purple-300 border border-purple-700/50 shadow-xs">
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span>VoiceFlow Studio v2.4 • Active Session</span>
+          {/* Active Session & Logged In User Pill */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-purple-950/80 text-purple-300 border border-purple-700/50 shadow-xs">
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              <span>VoiceFlow Studio v2.4 • Active Session</span>
+            </div>
+
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-700/50 shadow-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Online: <span className="text-white font-black">{userName}</span> ({userHandle})</span>
+            </div>
           </div>
 
-          {/* Headline */}
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight">
-            {timeGreeting}, {userName} 👋
-          </h1>
+          {/* Headline with Username Display */}
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight">
+              {timeGreeting}, {userName} 👋
+            </h1>
+            <span className="text-xs sm:text-sm font-bold text-purple-300 font-mono px-3 py-1 rounded-full bg-purple-900/60 border border-purple-500/40 shadow-xs">
+              {userHandle}
+            </span>
+          </div>
 
           {/* Subtitle */}
           <p className="text-slate-300/80 text-xs sm:text-sm md:text-base max-w-3xl leading-relaxed">
@@ -245,88 +260,114 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </section>
 
-      {/* 3. Usage & Credits Section */}
+      {/* 3. Performance Metrics Hub */}
       <section className="space-y-3">
-        <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-          USAGE & CREDITS
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+            SYSTEM PERFORMANCE & USAGE ANALYTICS
+          </h2>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+              Plan:
+            </span>
+            <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${
+              usage?.plan === 'pro' ? 'bg-indigo-500/20 text-indigo-400' : 
+              usage?.role === 'admin' || usage?.role === 'super_admin' ? 'bg-amber-500/20 text-amber-400' :
+              'bg-slate-700/50 text-slate-400'
+            }`}>
+              {usage?.role === 'admin' || usage?.role === 'super_admin' ? 'ADMIN' : (usage?.plan || 'FREE').toUpperCase()}
+            </span>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Metric 1: Characters Used */}
+          {/* Metric 1: AI Voice Usage */}
           <div className="p-5 rounded-2xl bg-[#12131a] border border-slate-800/80 space-y-3 shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400">Characters Used</span>
-              <FileText className="w-4 h-4 text-purple-400" />
+              <span className="text-xs font-semibold text-slate-400">AI Voice Generations</span>
+              <Radio className="w-4 h-4 text-purple-400" />
             </div>
-            <div className="flex items-baseline gap-1.5">
+            <div className="flex items-baseline gap-2">
               <span className="text-2xl font-black text-white tracking-tight">
-                {charactersUsed.toLocaleString()}
+                {usage?.isUnlimitedAdmin ? '∞' : `${usage?.features.TEXT_TO_VOICE.used} / ${usage?.features.TEXT_TO_VOICE.limit}`}
               </span>
-              <span className="text-xs text-slate-400">/ {characterLimit.toLocaleString()}</span>
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Monthly</span>
             </div>
             <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
               <div
-                className="bg-purple-600 h-1.5 rounded-full transition-all duration-500"
-                style={{ width: `${charPercent}%` }}
+                className="bg-purple-500 h-1.5 rounded-full transition-all duration-500"
+                style={{ width: `${usage?.features.TEXT_TO_VOICE.percentage || 0}%` }}
               />
             </div>
           </div>
 
-          {/* Metric 2: Audio Generated */}
-          <div className="p-5 rounded-2xl bg-[#12131a] border border-slate-800/80 space-y-2 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400">Audio Generated</span>
-              <Volume2 className="w-4 h-4 text-blue-400" />
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black text-white tracking-tight">
-                {audioGeneratedCount}
-              </span>
-              <span className="text-xs text-emerald-400 font-semibold inline-flex items-center gap-0.5">
-                <TrendingUp className="w-3 h-3" />
-                +12%
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 pt-1">
-              All voices and exports
-            </p>
-          </div>
-
-          {/* Metric 3: Minutes Converted */}
-          <div className="p-5 rounded-2xl bg-[#12131a] border border-slate-800/80 space-y-2 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400">Minutes Converted</span>
-              <Clock className="w-4 h-4 text-purple-400" />
-            </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-black text-white tracking-tight">
-                {audioMinutes}
-              </span>
-              <span className="text-xs text-slate-400">min</span>
-            </div>
-            <p className="text-xs text-slate-400 pt-1">
-              High definition rendering
-            </p>
-          </div>
-
-          {/* Metric 4: Remaining Credits */}
+          {/* Metric 2: AI Writing Usage */}
           <div className="p-5 rounded-2xl bg-[#12131a] border border-slate-800/80 space-y-3 shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400">Remaining Credits</span>
-              <Zap className="w-4 h-4 text-amber-400" />
+              <span className="text-xs font-semibold text-slate-400">AI Writing Generations</span>
+              <FileText className="w-4 h-4 text-fuchsia-400" />
             </div>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-black text-white tracking-tight">
-                {remainingCreditsPercent}%
+                {usage?.isUnlimitedAdmin ? '∞' : `${usage?.features.AI_WRITING.used} / ${usage?.features.AI_WRITING.limit}`}
               </span>
-              <span className="text-xs text-emerald-400 font-semibold">Available</span>
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Generations</span>
+            </div>
+            <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="bg-fuchsia-500 h-1.5 rounded-full transition-all duration-500"
+                style={{ width: `${usage?.features.AI_WRITING.percentage || 0}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Metric 3: Translation Usage */}
+          <div className="p-5 rounded-2xl bg-[#12131a] border border-slate-800/80 space-y-3 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-400">Translation Credits</span>
+              <Volume2 className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-black text-white tracking-tight">
+                {usage?.isUnlimitedAdmin ? '∞' : `${usage?.features.TRANSLATION.used} / ${usage?.features.TRANSLATION.limit}`}
+              </span>
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Credits</span>
             </div>
             <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
               <div
                 className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500"
-                style={{ width: `${remainingCreditsPercent}%` }}
+                style={{ width: `${usage?.features.TRANSLATION.percentage || 0}%` }}
               />
             </div>
+          </div>
+
+          {/* Metric 4: Subscription Status */}
+          <div className="p-5 rounded-2xl bg-[#12131a] border border-slate-800/80 space-y-3 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-400">Plan Status</span>
+              <Zap className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-black text-white tracking-tight">
+                {usage?.plan === 'pro' ? 'PRO' : usage?.isUnlimitedAdmin ? 'ADMIN' : 'FREE'}
+              </span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${usage?.plan === 'pro' ? 'text-emerald-400' : 'text-slate-500'}`}>
+                {usage?.plan === 'pro' ? 'Active' : 'Upgrade Required'}
+              </span>
+            </div>
+            {usage?.plan !== 'pro' && !usage?.isUnlimitedAdmin && (
+              <button 
+                onClick={() => onNavigate('billing')}
+                className="w-full py-1 text-[10px] font-bold uppercase tracking-widest text-white bg-indigo-600 rounded hover:bg-indigo-700 transition-colors"
+              >
+                Upgrade to Pro
+              </button>
+            )}
+            {(usage?.plan === 'pro' || usage?.isUnlimitedAdmin) && (
+              <div className="w-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase tracking-widest py-1 text-center rounded border border-emerald-500/20">
+                Full Access Unlocked
+              </div>
+            )}
           </div>
         </div>
       </section>

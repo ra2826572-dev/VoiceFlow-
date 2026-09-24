@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useUsage } from '../context/UsageContext';
 import { VOICES_CATALOG, SUPPORTED_LANGUAGES } from '../data/voices';
 import { Voice, VoiceEmotion, VoiceStyle, PitchLevel, ClonedVoice, CustomVoiceParams, ConversionItem } from '../types';
 
@@ -41,6 +42,7 @@ export const VoiceStudioView: React.FC<VoiceStudioViewProps> = ({
 }) => {
   const { user } = useAuth();
   const { success, error } = useToast();
+  const { checkLimit, showLimitModal, refreshUsage } = useUsage();
 
   // Active Sub-Tab
   const [activeTab, setActiveTab] = useState<'tts' | 'cloning' | 'custom' | 'library'>('tts');
@@ -131,13 +133,21 @@ export const VoiceStudioView: React.FC<VoiceStudioViewProps> = ({
       return;
     }
 
+    if (!checkLimit('TEXT_TO_VOICE')) {
+      showLimitModal('TEXT_TO_VOICE');
+      return;
+    }
+
     setIsGenerating(true);
     setIsPlaying(false);
 
     try {
       const res = await fetch('/api/tts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-email': user?.email || '' 
+        },
         body: JSON.stringify({
           text,
           voice: selectedVoice,
@@ -151,12 +161,23 @@ export const VoiceStudioView: React.FC<VoiceStudioViewProps> = ({
         }),
       });
 
-      if (!res.ok) throw new Error('Speech synthesis failed');
+      if (!res.ok) {
+        if (res.status === 403) {
+          const data = await res.json();
+          if (data.code === 'LIMIT_REACHED') {
+            showLimitModal('TEXT_TO_VOICE');
+            setIsGenerating(false);
+            return;
+          }
+        }
+        throw new Error('Speech synthesis failed');
+      }
 
       const data = await res.json();
       const url = data.audioUrl;
       setGeneratedAudioUrl(url);
       success('Voice generated successfully!');
+      refreshUsage();
 
       if (onAddConversion) {
         onAddConversion({

@@ -111,6 +111,29 @@ export interface ConversionRecord {
 
 export type UserRole = 'super_admin' | 'admin' | 'moderator' | 'user';
 
+export type PaymentRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface PaymentRequest {
+  id: string;
+  userId: string;
+  userEmail: string;
+  userName: string;
+  plan: 'pro' | 'business' | string;
+  planName: string;
+  amount: string;
+  paymentNumber: string; // '03095793662'
+  transactionId: string;
+  paymentScreenshot?: string;
+  senderNumber?: string;
+  senderName?: string;
+  paymentMethod?: string;
+  status: PaymentRequestStatus;
+  adminNote?: string;
+  createdAt: string;
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -124,6 +147,11 @@ export interface UserProfile {
   createdAt: string;
   lastLogin?: string;
   subscription: 'free' | 'creator' | 'pro' | 'business' | 'premium';
+  plan?: 'free' | 'creator' | 'pro' | 'business' | 'premium';
+  subscriptionStatus?: 'active' | 'pending' | 'past_due' | 'canceled' | 'trialing' | 'inactive';
+  renewalDate?: string | null;
+  proExpiresAt?: string | null;
+  paymentRequestId?: string | null;
   charactersUsed: number;
   characterLimit: number;
   audioGeneratedMinutes: number;
@@ -737,5 +765,66 @@ export interface SupportTicketItem {
   message: string;
   status: 'open' | 'in-progress' | 'resolved';
   createdAt: string;
+}
+
+// 17. Usage & Limits System Types
+export type FeatureUsageType =
+  | 'TEXT_TO_VOICE'
+  | 'VOICE_TO_TEXT'
+  | 'AI_WRITING'
+  | 'TRANSLATION'
+  | 'OTHER_AI';
+
+export interface FeatureUsageRecord {
+  id: string;
+  userId: string;
+  feature: FeatureUsageType;
+  used: number;
+  limit: number;
+  periodStart: string;
+  periodEnd: string;
+  updatedAt: string;
+}
+
+export interface FeatureUsageStatus {
+  feature: FeatureUsageType;
+  featureName: string;
+  used: number;
+  limit: number;
+  remaining: number;
+  isUnlimited: boolean;
+  percentage: number;
+}
+
+export interface UserUsageSummary {
+  userId: string;
+  userEmail: string;
+  userName: string;
+  role: 'user' | 'admin' | 'super_admin';
+  plan: 'free' | 'pro';
+  subscriptionStatus: 'active' | 'pending' | 'rejected';
+  periodStart: string;
+  periodEnd: string;
+  isUnlimitedAdmin: boolean;
+  features: Record<FeatureUsageType, FeatureUsageStatus>;
+}
+
+export interface SystemLimitsConfig {
+  freeLimits: Record<FeatureUsageType, number>;
+  proLimits: Record<FeatureUsageType, number>;
+  resetPeriod: 'monthly' | 'weekly';
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export interface UsageAnalyticsOverview {
+  totalUsers: number;
+  freeUsers: number;
+  proUsers: number;
+  adminUsers: number;
+  totalUsage: number;
+  usageToday: number;
+  pendingUpgradeRequests: number;
+  featureTotals: Record<FeatureUsageType, number>;
 }
 

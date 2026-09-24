@@ -18,13 +18,17 @@ import {
 } from 'lucide-react';
 import { AIAssistantMessage } from '../types';
 import { useToast } from '../context/ToastContext';
+import { useUsage } from '../context/UsageContext';
+import { useAuth } from '../context/AuthContext';
 
 interface AIAssistantViewProps {
   onNavigateToVoiceStudio?: (scriptText: string) => void;
 }
 
 export const AIAssistantView: React.FC<AIAssistantViewProps> = ({ onNavigateToVoiceStudio }) => {
+  const { user } = useAuth();
   const { success, error: toastError } = useToast();
+  const { checkLimit, showLimitModal, refreshUsage } = useUsage();
   const [messages, setMessages] = useState<AIAssistantMessage[]>([
     {
       id: 'init-1',
@@ -57,12 +61,21 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({ onNavigateToVo
 
     setMessages((prev) => [...prev, userMsg]);
     setInputText('');
+
+    if (!checkLimit('OTHER_AI')) {
+      showLimitModal('OTHER_AI');
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
       const res = await fetch('/api/ai/assistant', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-email': user?.email || ''
+        },
         body: JSON.stringify({
           prompt,
           action: actionName || 'chat',
@@ -72,7 +85,14 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({ onNavigateToVo
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Assistant failed');
+      if (!res.ok) {
+        if (res.status === 403 && data.code === 'LIMIT_REACHED') {
+          showLimitModal('OTHER_AI');
+          setIsProcessing(false);
+          return;
+        }
+        throw new Error(data.error || 'Assistant failed');
+      }
 
       setMessages((prev) => [
         ...prev,
@@ -86,6 +106,7 @@ export const AIAssistantView: React.FC<AIAssistantViewProps> = ({ onNavigateToVo
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
+      refreshUsage();
     } catch (err: any) {
       toastError(err.message || 'Failed to process assistant request');
     } finally {

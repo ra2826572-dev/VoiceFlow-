@@ -240,9 +240,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                 aria-haspopup="true"
               >
                 <UserAvatar size="sm" />
-                <span className="hidden sm:inline-block text-xs font-bold text-slate-900 dark:text-white max-w-[120px] truncate">
-                  {user?.name}
-                </span>
+                <div className="hidden sm:flex flex-col text-left leading-none">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white max-w-[120px] truncate">
+                    {user?.name || 'User'}
+                  </span>
+                  <span className="text-[10px] text-purple-400 font-semibold font-mono max-w-[120px] truncate">
+                    @{user?.username?.replace(/^@/, '') || 'user'}
+                  </span>
+                </div>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
               </button>
 

@@ -4,6 +4,7 @@ import { SUPPORTED_LANGUAGES } from '../data/voices';
 import { LanguageCode, ConversionItem } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useUsage } from '../context/UsageContext';
 import {
   Copy,
   Download,
@@ -27,6 +28,7 @@ export const VoiceToTextStudio: React.FC<VoiceToTextStudioProps> = ({
 }) => {
   const { user, updateProfile } = useAuth();
   const { success, error, info } = useToast();
+  const { checkLimit, showLimitModal, refreshUsage } = useUsage();
 
   const [selectedLanguage, setSelectedLanguage] = useState<LanguageCode>('ur');
   const [transcribedText, setTranscribedText] = useState<string>(
@@ -44,6 +46,11 @@ export const VoiceToTextStudio: React.FC<VoiceToTextStudioProps> = ({
   );
 
   const handleAudioReady = async (audioBlob: Blob, audioBase64: string, duration: number, liveText?: string) => {
+    if (!checkLimit('VOICE_TO_TEXT')) {
+      showLimitModal('VOICE_TO_TEXT');
+      return;
+    }
+
     setIsTranscribing(true);
     setLastAudioDuration(duration);
 
@@ -60,7 +67,10 @@ export const VoiceToTextStudio: React.FC<VoiceToTextStudioProps> = ({
     try {
       const response = await fetch('/api/stt', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-email': user?.email || ''
+        },
         signal: controller.signal,
         body: JSON.stringify({
           audioBase64,
@@ -77,6 +87,7 @@ export const VoiceToTextStudio: React.FC<VoiceToTextStudioProps> = ({
         const text = data.text || liveText || 'Transcribed speech text.';
         setTranscribedText(text);
         success(data.cached ? 'Instant transcription ready!' : 'Transcription completed!');
+        refreshUsage();
 
         // Save conversion record
         const record: ConversionItem = {
@@ -98,6 +109,14 @@ export const VoiceToTextStudio: React.FC<VoiceToTextStudioProps> = ({
           });
         }
       } else {
+        if (response.status === 403) {
+          const data = await response.json();
+          if (data.code === 'LIMIT_REACHED') {
+            showLimitModal('VOICE_TO_TEXT');
+            setIsTranscribing(false);
+            return;
+          }
+        }
         throw new Error('Server returned non-200');
       }
     } catch (err: any) {

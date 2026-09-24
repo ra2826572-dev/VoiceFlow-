@@ -1,0 +1,42 @@
+[
+  {
+    "id": "pay-1790250829420-bddqd",
+    "userId": "user_rej_1790250829414",
+    "userEmail": "fake_1790250829414@example.com",
+    "userName": "Fake Submitter",
+    "plan": "pro",
+    "planName": "Pro Creator",
+    "amount": "PKR 2,500",
+    "paymentNumber": "03095793662",
+    "transactionId": "FAKE-TRX-749693",
+    "paymentScreenshot": "data:image/png;base64,fake",
+    "senderNumber": "",
+    "senderName": "",
+    "paymentMethod": "JazzCash",
+    "status": "REJECTED",
+    "adminNote": "Transaction ID was not found in bank statement records.",
+    "createdAt": "2026-09-24T11:53:49.420Z",
+    "reviewedAt": "2026-09-24T11:53:49.425Z",
+    "reviewedBy": "ra2826572@gmail.com"
+  },
+  {
+    "id": "pay-1790250829399-0u6h2",
+    "userId": "user_test_1790250829335",
+    "userEmail": "tariq_1790250829335@example.com",
+    "userName": "Tariq Mehmood",
+    "plan": "pro",
+    "planName": "Pro Creator",
+    "amount": "PKR 2,500",
+    "paymentNumber": "03095793662",
+    "transactionId": "TRX-192344172",
+    "paymentScreenshot": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "senderNumber": "03001234567",
+    "senderName": "Tariq Mehmood",
+    "paymentMethod": "Easypaisa",
+    "status": "APPROVED",
+    "adminNote": "Transfer verified in Easypaisa account.",
+    "createdAt": "2026-09-24T11:53:49.399Z",
+    "reviewedAt": "2026-09-24T11:53:49.409Z",
+    "reviewedBy": "ra2826572@gmail.com"
+  }
+]

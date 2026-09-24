@@ -23,6 +23,8 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { useUsage } from '../context/UsageContext';
+import { useAuth } from '../context/AuthContext';
 import { VOICES_CATALOG } from '../data/voices';
 
 interface TranslationHistoryItem {
@@ -62,7 +64,9 @@ const SAMPLE_PRESETS = [
 ];
 
 export const MultiLanguageStudioView: React.FC = () => {
+  const { user } = useAuth();
   const { success, error } = useToast();
+  const { checkLimit, showLimitModal, refreshUsage } = useUsage();
 
   const [activeTab, setActiveTab] = useState<'text' | 'voice' | 'history'>('text');
 
@@ -141,11 +145,19 @@ export const MultiLanguageStudioView: React.FC = () => {
       return;
     }
 
+    if (!checkLimit('TRANSLATION')) {
+      showLimitModal('TRANSLATION');
+      return;
+    }
+
     setIsTranslating(true);
     try {
       const res = await fetch('/api/translate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-user-email': user?.email || ''
+        },
         body: JSON.stringify({
           text: sourceText,
           sourceLanguage: sourceLang,
@@ -161,8 +173,13 @@ export const MultiLanguageStudioView: React.FC = () => {
         success(`Successfully translated into ${targetLang}!`);
         // Refresh history list
         fetchHistory();
+        refreshUsage();
       } else {
-        error(data.error || 'Translation failed. Please check your text or language selection.');
+        if (res.status === 403 && data.code === 'LIMIT_REACHED') {
+          showLimitModal('TRANSLATION');
+        } else {
+          error(data.error || 'Translation failed. Please check your text or language selection.');
+        }
       }
     } catch (err: any) {
       error('Translation failed. Please check your connection.');

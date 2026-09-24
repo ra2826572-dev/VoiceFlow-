@@ -1,16 +1,21 @@
 import React, { useState } from 'react';
-import { Check, Sparkles, Zap, ShieldCheck } from 'lucide-react';
+import { Check, Sparkles, Zap, ShieldCheck, Smartphone, Copy } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { ManualPaymentModal } from '../components/ManualPaymentModal';
 
 interface PricingViewProps {
   onUpgradeSuccess?: () => void;
 }
 
 export const PricingView: React.FC<PricingViewProps> = ({ onUpgradeSuccess }) => {
-  const { user, updateProfile } = useAuth();
+  const { user } = useAuth();
   const { success } = useToast();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [copiedNumber, setCopiedNumber] = useState(false);
+
+  const PAYMENT_NUMBER = '03095793662';
 
   const plans = [
     {
@@ -31,52 +36,39 @@ export const PricingView: React.FC<PricingViewProps> = ({ onUpgradeSuccess }) =>
       popular: false,
     },
     {
-      id: 'creator',
-      name: 'Creator',
-      desc: 'For YouTube creators, podcasters, and independent publishers.',
-      priceMonthly: 19,
-      priceAnnual: 15,
+      id: 'pro',
+      name: 'Pro Creator',
+      desc: 'Full studio access, 50+ neural voices, voice cloning, and HD exports.',
+      priceMonthly: 29,
+      priceAnnual: 24,
       characters: '100,000 chars / month',
       features: [
-        'All 50+ Multilingual AI Voices',
-        'Urdu, Arabic, English, Spanish & more',
-        'Full Emotion & Delivery controls',
-        'Lossless WAV & MP3 exports',
-        'Voice-to-Text transcription with SRT export',
-        'Commercial usage rights',
-        'Priority synthesis queue',
-      ],
-      current: user?.subscription === 'creator',
-      popular: true,
-    },
-    {
-      id: 'pro',
-      name: 'Studio Pro',
-      desc: 'For agencies, professional audiobook publishers, and SaaS platforms.',
-      priceMonthly: 49,
-      priceAnnual: 39,
-      characters: '500,000 chars / month',
-      features: [
-        'Unlimited access to all studio voices',
+        'All 50+ Multilingual AI Voices & Emotions',
+        'Voice Cloning (up to 5 custom clones)',
+        'AI Video Dubbing & subtitle synchronization',
+        'Lossless WAV & Studio MP3 exports',
+        'Commercial monetization rights',
         'Priority high-speed GPU rendering',
-        'Long-form audiobook batch mode',
-        'SRT Subtitle auto-sync',
-        'Commercial license & copyright protection',
-        'Dedicated 24/7 VIP engineer support',
-        'Custom voice personality fine-tuning',
+        'Admin Verified manual subscription',
       ],
       current: user?.subscription === 'pro',
-      popular: false,
+      popular: true,
     },
   ];
 
-  const handleSelectPlan = async (planId: string) => {
-    await updateProfile({
-      subscription: planId as any,
-      characterLimit: planId === 'free' ? 10000 : planId === 'creator' ? 100000 : 500000,
-    });
-    success(`Subscribed to the ${planId.toUpperCase()} plan!`);
-    onUpgradeSuccess?.();
+  const handleSelectPlan = (planId: string) => {
+    if (planId === 'free') {
+      return;
+    }
+    // All paid upgrades MUST use the Manual Payment + Admin Approval modal
+    setIsPaymentModalOpen(true);
+  };
+
+  const handleCopyNumber = () => {
+    navigator.clipboard.writeText(PAYMENT_NUMBER);
+    setCopiedNumber(true);
+    success('Payment number 03095793662 copied to clipboard!');
+    setTimeout(() => setCopiedNumber(false), 3000);
   };
 
   return (
@@ -186,13 +178,63 @@ export const PricingView: React.FC<PricingViewProps> = ({ onUpgradeSuccess }) =>
                       : 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90'
                   }`}
                 >
-                  {plan.current ? 'Current Plan' : 'Select ' + plan.name}
+                  {plan.current ? 'Current Plan' : 'Upgrade to ' + plan.name}
                 </button>
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* Manual Payment Information Banner */}
+      <div className="p-6 rounded-3xl bg-gradient-to-r from-purple-900/90 via-indigo-950 to-slate-950 border border-purple-500/40 text-white flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center shrink-0">
+            <Smartphone className="w-6 h-6 text-purple-300" />
+          </div>
+          <div>
+            <div className="text-xs text-purple-300 font-bold uppercase tracking-wider">
+              Send your payment to the following number:
+            </div>
+            <div className="text-2xl sm:text-3xl font-mono font-black tracking-wider text-white">
+              {PAYMENT_NUMBER}
+            </div>
+            <div className="text-[11px] text-slate-300">
+              Easypaisa • JazzCash • Nayapay • Sadapay • Bank Raast
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          <button
+            onClick={handleCopyNumber}
+            className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              copiedNumber
+                ? 'bg-emerald-600 text-white'
+                : 'bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/30'
+            }`}
+          >
+            {copiedNumber ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            <span>{copiedNumber ? 'Copied Number!' : 'Copy Number'}</span>
+          </button>
+
+          <button
+            onClick={() => setIsPaymentModalOpen(true)}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-bold bg-white text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+          >
+            Submit Payment Request
+          </button>
+        </div>
+      </div>
+
+      {/* Manual Payment Upgrade Modal */}
+      <ManualPaymentModal
+        isOpen={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+        onPaymentSubmitted={() => {
+          onUpgradeSuccess?.();
+        }}
+      />
     </div>
   );
 };

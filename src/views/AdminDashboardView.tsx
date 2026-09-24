@@ -37,6 +37,14 @@ import {
   UserCheck,
   UserX,
   Radio,
+  Phone,
+  Copy,
+  X,
+  Check,
+  FileText,
+  Crown,
+  PenTool,
+  Globe,
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import {
@@ -45,6 +53,10 @@ import {
   AdminLiveEvent,
   SubscriptionTier,
   UserRole,
+  PaymentRequest,
+  SystemLimitsConfig,
+  FeatureUsageType,
+  UsageAnalyticsOverview,
 } from '../types';
 import { AdminUserDetailsModal } from '../components/AdminUserDetailsModal';
 
@@ -55,7 +67,7 @@ interface AdminDashboardViewProps {
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLock }) => {
   const { success, error: toastError, info } = useToast();
   const [activeTab, setActiveTab] = useState<
-    'analytics' | 'users' | 'live-feed' | 'audit-logs' | 'voices' | 'projects'
+    'analytics' | 'users' | 'payments' | 'live-feed' | 'audit-logs' | 'voices' | 'projects' | 'usage-limits'
   >('users');
 
   // Metrics & State
@@ -63,6 +75,19 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLock }
   const [users, setUsers] = useState<AdminManagedUser[]>([]);
   const [liveEvents, setLiveEvents] = useState<AdminLiveEvent[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
+  const [systemLimits, setSystemLimits] = useState<SystemLimitsConfig | null>(null);
+  const [usageOverview, setUsageOverview] = useState<UsageAnalyticsOverview | null>(null);
+  const [isSavingLimits, setIsSavingLimits] = useState(false);
+  const [pendingPaymentCount, setPendingPaymentCount] = useState<number>(0);
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [paymentSearch, setPaymentSearch] = useState('');
+  const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
+  const [rejectingRequest, setRejectingRequest] = useState<PaymentRequest | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [approvingRequest, setApprovingRequest] = useState<PaymentRequest | null>(null);
+  const [isApproving, setIsApproving] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -183,27 +208,113 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLock }
     } catch {}
   }, [getAdminHeaders]);
 
+  const loadPayments = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/payments', {
+        headers: getAdminHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPaymentRequests(data.paymentRequests || []);
+        setPendingPaymentCount(data.pendingCount || 0);
+      }
+    } catch {}
+  }, [getAdminHeaders]);
+
+  const loadUsageAndLimits = useCallback(async () => {
+    try {
+      const [limitsRes, overviewRes] = await Promise.all([
+        fetch('/api/admin/system/limits', { headers: getAdminHeaders() }),
+        fetch('/api/admin/usage/overview', { headers: getAdminHeaders() })
+      ]);
+      
+      if (limitsRes.ok) {
+        const data = await limitsRes.json();
+        if (data.limits) setSystemLimits(data.limits);
+      }
+      
+      if (overviewRes.ok) {
+        const data = await overviewRes.json();
+        if (data.overview) setUsageOverview(data.overview);
+      }
+    } catch {}
+  }, [getAdminHeaders]);
+
   useEffect(() => {
     loadMetrics();
     loadUsers();
     loadLogsAndEvents();
-  }, [loadMetrics, loadUsers, loadLogsAndEvents]);
+    loadPayments();
+    loadUsageAndLimits();
+  }, [loadMetrics, loadUsers, loadLogsAndEvents, loadPayments, loadUsageAndLimits]);
 
-  // Real-time automatic polling every 4s so newly registered users immediately appear without reload
+  // Real-time automatic polling every 4s so newly submitted payments & users immediately appear without reload
   useEffect(() => {
     const timer = setInterval(() => {
       loadUsers();
       loadLogsAndEvents();
       loadMetrics();
+      loadPayments();
+      loadUsageAndLimits();
     }, 4000);
     return () => clearInterval(timer);
-  }, [loadUsers, loadLogsAndEvents, loadMetrics]);
+  }, [loadUsers, loadLogsAndEvents, loadMetrics, loadPayments, loadUsageAndLimits]);
 
   const handleRefreshAll = async () => {
     setIsRefreshing(true);
-    await Promise.all([loadMetrics(), loadUsers(), loadLogsAndEvents()]);
+    await Promise.all([loadMetrics(), loadUsers(), loadLogsAndEvents(), loadPayments(), loadUsageAndLimits()]);
     setIsRefreshing(false);
     success('Admin console data synchronized in real-time.');
+  };
+
+  const handleApprovePayment = async (req: PaymentRequest) => {
+    setIsApproving(true);
+    try {
+      const res = await fetch(`/api/admin/payments/${req.id}/approve`, {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({
+          adminEmail: 'ra2826572@gmail.com',
+          adminNote: 'Verified and approved by Administrator.',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to approve payment');
+
+      success(`Payment approved. ${req.userName}'s Pro plan is now active.`);
+      setApprovingRequest(null);
+      await Promise.all([loadPayments(), loadUsers(), loadLogsAndEvents()]);
+    } catch (err: any) {
+      toastError(err.message || 'Error approving payment');
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const handleRejectPayment = async () => {
+    if (!rejectingRequest) return;
+    setIsRejecting(true);
+    try {
+      const res = await fetch(`/api/admin/payments/${rejectingRequest.id}/reject`, {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({
+          adminEmail: 'ra2826572@gmail.com',
+          reason: rejectionReason.trim() || 'Transaction could not be verified in bank records.',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to reject payment');
+
+      info(`Payment request rejected for ${rejectingRequest.userName}. User remains on Free plan.`);
+      setRejectingRequest(null);
+      setRejectionReason('');
+      await Promise.all([loadPayments(), loadUsers(), loadLogsAndEvents()]);
+    } catch (err: any) {
+      toastError(err.message || 'Error rejecting payment');
+    } finally {
+      setIsRejecting(false);
+    }
   };
 
   // Quick Actions Handlers
@@ -418,11 +529,18 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLock }
       <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-900/80 border border-slate-800 overflow-x-auto">
         {[
           { id: 'users', label: `Users Management (${totalUsersCount || users.length})`, icon: Users },
+          {
+            id: 'payments',
+            label: `Payment Requests (${paymentRequests.filter((p) => p.status === 'PENDING').length} Pending)`,
+            icon: CreditCard,
+            badge: pendingPaymentCount,
+          },
           { id: 'analytics', label: 'KPIs & SaaS Analytics', icon: BarChart3 },
           { id: 'live-feed', label: 'Real-time Updates Feed', icon: Radio, badge: liveEvents.length },
           { id: 'audit-logs', label: 'Security & Audit Logs', icon: ShieldCheck },
           { id: 'voices', label: 'Voices Moderation', icon: Mic },
           { id: 'projects', label: 'Projects Audit', icon: FolderKanban },
+          { id: 'usage-limits', label: 'Usage & Limits', icon: Layers },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -871,6 +989,348 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLock }
         </div>
       )}
 
+      {/* TAB: PAYMENT REQUESTS (MANUAL UPGRADE & ADMIN APPROVAL) */}
+      {activeTab === 'payments' && (
+        <div className="space-y-6">
+          {/* Top Metric Cards for Payments */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-5 rounded-3xl bg-[#12131e] border border-slate-800 space-y-2 shadow-xl">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-xs font-semibold">Total Requests</span>
+                <CreditCard className="w-4 h-4 text-purple-400" />
+              </div>
+              <div className="text-3xl font-black text-white">{paymentRequests.length}</div>
+              <p className="text-[11px] text-slate-400">All-time manual subscription requests</p>
+            </div>
+
+            <div className="p-5 rounded-3xl bg-[#12131e] border border-amber-500/30 space-y-2 shadow-xl relative overflow-hidden">
+              <div className="flex items-center justify-between text-amber-400">
+                <span className="text-xs font-bold uppercase tracking-wider">Pending Review</span>
+                <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
+              </div>
+              <div className="text-3xl font-black text-amber-400">
+                {paymentRequests.filter((p) => p.status === 'PENDING').length}
+              </div>
+              <p className="text-[11px] text-amber-400/80">Awaiting administrator verification</p>
+            </div>
+
+            <div className="p-5 rounded-3xl bg-[#12131e] border border-emerald-500/30 space-y-2 shadow-xl">
+              <div className="flex items-center justify-between text-emerald-400">
+                <span className="text-xs font-bold uppercase tracking-wider">Approved (Active Pro)</span>
+                <CheckCircle className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div className="text-3xl font-black text-emerald-400">
+                {paymentRequests.filter((p) => p.status === 'APPROVED').length}
+              </div>
+              <p className="text-[11px] text-emerald-400/80">Pro tier activated & verified</p>
+            </div>
+
+            <div className="p-5 rounded-3xl bg-[#12131e] border border-rose-500/30 space-y-2 shadow-xl">
+              <div className="flex items-center justify-between text-rose-400">
+                <span className="text-xs font-bold uppercase tracking-wider">Rejected Requests</span>
+                <AlertTriangle className="w-4 h-4 text-rose-400" />
+              </div>
+              <div className="text-3xl font-black text-rose-400">
+                {paymentRequests.filter((p) => p.status === 'REJECTED').length}
+              </div>
+              <p className="text-[11px] text-rose-400/80">Invalid TID or missing transfer</p>
+            </div>
+          </div>
+
+          {/* Payment Account Reminder Banner */}
+          <div className="p-4 rounded-2xl bg-purple-950/40 border border-purple-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-purple-200">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-300 flex items-center justify-center font-bold">
+                <Phone className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="font-semibold text-white">Admin Payment Number: </span>
+                <strong className="font-mono text-purple-300 text-sm">03095793662</strong>
+                <span className="text-slate-400 ml-2">(Users transfer funds to this official account)</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-slate-400">Auto-syncing active</span>
+              <button
+                onClick={loadPayments}
+                className="px-3 py-1.5 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 font-bold transition-colors cursor-pointer"
+              >
+                Refresh Requests
+              </button>
+            </div>
+          </div>
+
+          {/* Filters & Search Toolbar */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 rounded-2xl bg-[#12131e] border border-slate-800">
+            {/* Status Filter Buttons */}
+            <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
+              {[
+                { id: 'all', label: 'All Requests', count: paymentRequests.length },
+                {
+                  id: 'pending',
+                  label: 'Pending',
+                  count: paymentRequests.filter((p) => p.status === 'PENDING').length,
+                  badgeColor: 'bg-amber-500',
+                },
+                {
+                  id: 'approved',
+                  label: 'Approved',
+                  count: paymentRequests.filter((p) => p.status === 'APPROVED').length,
+                  badgeColor: 'bg-emerald-500',
+                },
+                {
+                  id: 'rejected',
+                  label: 'Rejected',
+                  count: paymentRequests.filter((p) => p.status === 'REJECTED').length,
+                  badgeColor: 'bg-rose-500',
+                },
+              ].map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setPaymentFilter(f.id as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                    paymentFilter === f.id
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                  }`}
+                >
+                  <span>{f.label}</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-900/60 font-mono">
+                    {f.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Search Input */}
+            <div className="relative w-full sm:w-72">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search user, email, TID..."
+                value={paymentSearch}
+                onChange={(e) => setPaymentSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+              />
+            </div>
+          </div>
+
+          {/* Payment Requests Table */}
+          <div className="rounded-3xl border border-slate-800 bg-[#12131e] overflow-hidden shadow-2xl">
+            {paymentRequests
+              .filter((p) => {
+                if (paymentFilter !== 'all' && p.status !== paymentFilter.toUpperCase()) return false;
+                if (!paymentSearch.trim()) return true;
+                const q = paymentSearch.toLowerCase().trim();
+                return (
+                  p.userName.toLowerCase().includes(q) ||
+                  p.userEmail.toLowerCase().includes(q) ||
+                  p.transactionId.toLowerCase().includes(q) ||
+                  (p.senderNumber && p.senderNumber.includes(q))
+                );
+              })
+              .length === 0 ? (
+              <div className="py-16 text-center space-y-2">
+                <CreditCard className="w-8 h-8 text-slate-600 mx-auto" />
+                <p className="text-xs font-bold text-slate-400">No payment requests found</p>
+                <p className="text-[11px] text-slate-500">
+                  {paymentFilter !== 'all'
+                    ? `No requests match the "${paymentFilter}" filter.`
+                    : 'When users submit manual upgrade payments to 03095793662, they will appear here.'}
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-[#171926] text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-800">
+                    <tr>
+                      <th className="py-3.5 px-4">User</th>
+                      <th className="py-3.5 px-4">Email</th>
+                      <th className="py-3.5 px-4">Selected Plan</th>
+                      <th className="py-3.5 px-4">Amount</th>
+                      <th className="py-3.5 px-4">Transaction ID (TID)</th>
+                      <th className="py-3.5 px-4">Payment Screenshot</th>
+                      <th className="py-3.5 px-4">Submitted Date</th>
+                      <th className="py-3.5 px-4">Status</th>
+                      <th className="py-3.5 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {paymentRequests
+                      .filter((p) => {
+                        if (paymentFilter !== 'all' && p.status !== paymentFilter.toUpperCase())
+                          return false;
+                        if (!paymentSearch.trim()) return true;
+                        const q = paymentSearch.toLowerCase().trim();
+                        return (
+                          p.userName.toLowerCase().includes(q) ||
+                          p.userEmail.toLowerCase().includes(q) ||
+                          p.transactionId.toLowerCase().includes(q) ||
+                          (p.senderNumber && p.senderNumber.includes(q))
+                        );
+                      })
+                      .map((req) => (
+                        <tr key={req.id} className="hover:bg-slate-800/30 transition-colors">
+                          {/* User */}
+                          <td className="py-3.5 px-4">
+                            <div className="font-bold text-white flex items-center gap-2">
+                              <span className="w-7 h-7 rounded-lg bg-purple-600/20 text-purple-400 flex items-center justify-center font-bold text-xs uppercase">
+                                {req.userName.slice(0, 1)}
+                              </span>
+                              <span>{req.userName}</span>
+                            </div>
+                            <span className="text-[10px] text-slate-500 font-mono">ID: {req.userId}</span>
+                          </td>
+
+                          {/* Email */}
+                          <td className="py-3.5 px-4 font-mono text-slate-300">{req.userEmail}</td>
+
+                          {/* Plan */}
+                          <td className="py-3.5 px-4">
+                            <span className="px-2 py-0.5 rounded-lg bg-purple-500/10 text-purple-300 font-bold border border-purple-500/20 text-[11px]">
+                              {req.planName || req.plan.toUpperCase()}
+                            </span>
+                          </td>
+
+                          {/* Amount */}
+                          <td className="py-3.5 px-4 font-bold text-white">{req.amount}</td>
+
+                          {/* Transaction ID */}
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-1.5 font-mono text-indigo-300 font-bold bg-slate-900 px-2 py-1 rounded-lg border border-slate-800 w-fit">
+                              <span>{req.transactionId}</span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(req.transactionId);
+                                  success('Copied TID: ' + req.transactionId);
+                                }}
+                                className="text-slate-400 hover:text-white"
+                                title="Copy Transaction ID"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                            </div>
+                            {req.senderNumber && (
+                              <span className="text-[10px] text-slate-500 block mt-0.5 font-mono">
+                                From: {req.senderNumber}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Payment Screenshot */}
+                          <td className="py-3.5 px-4">
+                            {req.paymentScreenshot ? (
+                              <div className="flex items-center gap-2">
+                                <img
+                                  src={req.paymentScreenshot}
+                                  alt="Screenshot Proof"
+                                  onClick={() => setSelectedScreenshot(req.paymentScreenshot || null)}
+                                  className="w-10 h-10 object-cover rounded-lg border border-slate-700 hover:scale-110 transition-transform cursor-pointer"
+                                  title="Click to view full screenshot"
+                                />
+                                <button
+                                  onClick={() => setSelectedScreenshot(req.paymentScreenshot || null)}
+                                  className="text-[11px] text-purple-400 hover:text-purple-300 font-semibold underline cursor-pointer"
+                                >
+                                  View Proof
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-slate-500 italic">No image</span>
+                            )}
+                          </td>
+
+                          {/* Submitted Date */}
+                          <td className="py-3.5 px-4 text-slate-400 font-mono text-[11px]">
+                            {new Date(req.createdAt).toLocaleDateString([], {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}
+                            <span className="block text-[10px] text-slate-500">
+                              {new Date(req.createdAt).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </td>
+
+                          {/* Status */}
+                          <td className="py-3.5 px-4">
+                            {req.status === 'PENDING' && (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                PENDING
+                              </span>
+                            )}
+                            {req.status === 'APPROVED' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                <CheckCircle className="w-3 h-3 text-emerald-400" />
+                                APPROVED
+                              </span>
+                            )}
+                            {req.status === 'REJECTED' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                                <X className="w-3 h-3 text-rose-400" />
+                                REJECTED
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-3.5 px-4 text-right">
+                            {req.status === 'PENDING' ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => setApprovingRequest(req)}
+                                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition-all cursor-pointer"
+                                  title="Verify payment and activate Pro plan"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>Approve Payment</span>
+                                </button>
+
+                                <button
+                                  onClick={() => {
+                                    setRejectingRequest(req);
+                                    setRejectionReason('');
+                                  }}
+                                  className="px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 font-bold text-xs flex items-center gap-1 transition-all cursor-pointer"
+                                  title="Reject request and keep user on Free plan"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                  <span>Reject Payment</span>
+                                </button>
+                              </div>
+                            ) : req.status === 'APPROVED' ? (
+                              <div className="text-[11px] text-emerald-400">
+                                <span className="font-semibold">Pro Active</span>
+                                <span className="block text-[10px] text-slate-500">
+                                  by {req.reviewedBy || 'Admin'}
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="text-[11px] text-rose-400">
+                                <span className="font-semibold">Rejected</span>
+                                <span
+                                  className="block text-[10px] text-slate-500 truncate max-w-[140px]"
+                                  title={req.adminNote}
+                                >
+                                  {req.adminNote || 'No reason'}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* TAB 2: ANALYTICS & KPIS */}
       {activeTab === 'analytics' && (
         <div className="space-y-6">
@@ -1234,6 +1694,203 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLock }
         </div>
       )}
 
+      {/* TAB 8: USAGE & LIMITS CONFIGURATION */}
+      {activeTab === 'usage-limits' && systemLimits && usageOverview && (
+        <div className="space-y-6">
+          {/* Usage Analytics Overview Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-5 rounded-2xl bg-[#12131e] border border-slate-800 space-y-1.5 shadow-xl text-left">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Usage Today</span>
+              <div className="flex items-center justify-between">
+                <span className="text-2xl font-black text-white">{usageOverview.usageToday}</span>
+                <TrendingUp className="w-5 h-5 text-emerald-400" />
+              </div>
+              <p className="text-[10px] text-slate-500 font-medium text-left">Across all AI models</p>
+            </div>
+            
+            <div className="p-5 rounded-2xl bg-[#12131e] border border-slate-800 space-y-1.5 shadow-xl text-left">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Free Users</span>
+              <div className="flex items-center justify-between">
+                <span className="text-2xl font-black text-white">{usageOverview.freeUsers}</span>
+                <Users className="w-5 h-5 text-slate-400" />
+              </div>
+              <p className="text-[10px] text-slate-500 font-medium text-left">{Math.round((usageOverview.freeUsers/Math.max(1, usageOverview.totalUsers))*100)}% of total userbase</p>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-[#12131e] border border-slate-800 space-y-1.5 shadow-xl text-left">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Pro Members</span>
+              <div className="flex items-center justify-between">
+                <span className="text-2xl font-black text-white">{usageOverview.proUsers}</span>
+                <Crown className="w-5 h-5 text-indigo-400" />
+              </div>
+              <p className="text-[10px] text-slate-500 font-medium text-left">{usageOverview.pendingUpgradeRequests} upgrades pending</p>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-[#12131e] border border-slate-800 space-y-1.5 shadow-xl text-left">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total System Users</span>
+              <div className="flex items-center justify-between">
+                <span className="text-2xl font-black text-white">{usageOverview.totalUsers}</span>
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+              </div>
+              <p className="text-[10px] text-slate-500 font-medium text-left">Verified database records</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Limit Configuration Panel */}
+            <div className="p-6 rounded-3xl bg-[#12131e] border border-slate-800 space-y-6 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                <div className="text-left">
+                  <h3 className="text-lg font-bold text-white">Feature Usage Limits</h3>
+                  <p className="text-xs text-slate-500 font-medium">Define max monthly credits for each subscription tier.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">Reset:</span>
+                  <select 
+                    value={systemLimits.resetPeriod}
+                    onChange={(e) => setSystemLimits({...systemLimits, resetPeriod: e.target.value as any})}
+                    className="bg-slate-900 border border-slate-700 text-xs font-bold text-white px-3 py-1.5 rounded-lg outline-none focus:border-purple-500"
+                  >
+                    <option value="monthly">Monthly</option>
+                    <option value="weekly">Weekly</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-6 overflow-y-auto max-h-[500px] pr-2 custom-scrollbar">
+                {(Object.keys(systemLimits.freeLimits) as FeatureUsageType[]).map((feat) => (
+                  <div key={feat} className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800/50 space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-purple-400">
+                        {feat === 'TEXT_TO_VOICE' ? <Radio size={16} /> :
+                         feat === 'VOICE_TO_TEXT' ? <Mic size={16} /> :
+                         feat === 'AI_WRITING' ? <PenTool size={16} /> :
+                         feat === 'TRANSLATION' ? <Globe size={16} /> : <Zap size={16} />}
+                      </div>
+                      <span className="text-xs font-black text-white uppercase tracking-wider">{feat.replace(/_/g, ' ')}</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5 text-left">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Free Tier Limit</label>
+                        <input 
+                          type="number"
+                          value={systemLimits.freeLimits[feat]}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value);
+                            const newFree = {...systemLimits.freeLimits, [feat]: isNaN(val) ? 0 : val};
+                            setSystemLimits({...systemLimits, freeLimits: newFree});
+                          }}
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm font-bold text-white focus:outline-none focus:border-purple-500"
+                        />
+                      </div>
+                      <div className="space-y-1.5 text-left">
+                        <label className="text-[10px] font-bold text-indigo-400/70 uppercase tracking-widest ml-1">Pro Tier Limit</label>
+                        <input 
+                          type="number"
+                          value={systemLimits.proLimits[feat]}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value);
+                            const newPro = {...systemLimits.proLimits, [feat]: isNaN(val) ? 0 : val};
+                            setSystemLimits({...systemLimits, proLimits: newPro});
+                          }}
+                          className="w-full bg-indigo-950/20 border border-indigo-500/30 rounded-xl px-4 py-2.5 text-sm font-bold text-white focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-4 border-t border-slate-800">
+                <button 
+                  onClick={async () => {
+                    setIsSavingLimits(true);
+                    try {
+                      const res = await fetch('/api/admin/system/limits', {
+                        method: 'POST',
+                        headers: {
+                          ...getAdminHeaders(),
+                          'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(systemLimits)
+                      });
+                      if (res.ok) {
+                        success('System limits updated successfully for all users.');
+                        loadUsageAndLimits();
+                      } else {
+                        throw new Error('Update failed');
+                      }
+                    } catch (e) {
+                      toastError('Failed to save system limits');
+                    } finally {
+                      setIsSavingLimits(false);
+                    }
+                  }}
+                  disabled={isSavingLimits}
+                  className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm uppercase tracking-widest shadow-xl shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingLimits ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                  <span>{isSavingLimits ? 'Deploying Changes...' : 'Save & Deploy Limits'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Feature Usage Distribution */}
+            <div className="p-6 rounded-3xl bg-[#12131e] border border-slate-800 space-y-6 shadow-2xl">
+              <div className="text-left">
+                <h3 className="text-lg font-bold text-white">System Feature Popularity</h3>
+                <p className="text-xs text-slate-500 font-medium">Real-time breakdown of feature usage across your platform.</p>
+              </div>
+
+              <div className="space-y-6">
+                {(Object.entries(usageOverview.featureTotals)).map(([feat, count]) => {
+                  const maxUsage = Math.max(...Object.values(usageOverview.featureTotals), 1);
+                  const percentage = Math.round((count / maxUsage) * 100);
+                  
+                  return (
+                    <div key={feat} className="space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-slate-300 uppercase tracking-wider">{feat.replace(/_/g, ' ')}</span>
+                        <span className="font-black text-white">{count.toLocaleString()} <span className="text-slate-500 font-medium">Ops</span></span>
+                      </div>
+                      <div className="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden">
+                        <div 
+                          className={`h-full transition-all duration-1000 ${
+                            feat === 'TEXT_TO_VOICE' ? 'bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.4)]' :
+                            feat === 'AI_WRITING' ? 'bg-fuchsia-500 shadow-[0_0_10px_rgba(217,70,239,0.4)]' :
+                            feat === 'VOICE_TO_TEXT' ? 'bg-teal-500' :
+                            feat === 'TRANSLATION' ? 'bg-emerald-500' : 'bg-slate-500'
+                          }`}
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <div className="pt-6 grid grid-cols-2 gap-4">
+                  <div className="p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 space-y-1 text-center">
+                    <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">Active Rate</span>
+                    <p className="text-xl font-black text-white">99.8%</p>
+                  </div>
+                  <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/10 space-y-1 text-center">
+                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Growth</span>
+                    <p className="text-xl font-black text-white">+14.2%</p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 text-center space-y-2">
+                  <p className="text-[10px] text-slate-500 font-medium italic">
+                    "Limits are enforced server-side. Changes to these values apply instantly to all users without requiring a page refresh."
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* FULL USER DETAILS MODAL */}
       <AdminUserDetailsModal
         user={detailUser}
@@ -1340,6 +1997,175 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({ onLock }
               >
                 Update Plan
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* APPROVE PAYMENT CONFIRMATION MODAL */}
+      {approvingRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md p-6 rounded-3xl bg-[#12131e] border border-emerald-500/40 space-y-5 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <Check className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-white">Approve Payment & Grant PRO</h3>
+                <p className="text-xs text-slate-400">Manual payment verification</p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">User:</span>
+                <span className="font-bold text-white">{approvingRequest.userName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Email:</span>
+                <span className="font-mono text-purple-300">{approvingRequest.userEmail}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Amount:</span>
+                <span className="font-bold text-emerald-400">{approvingRequest.amount}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Transaction ID (TID):</span>
+                <span className="font-mono font-bold text-indigo-300">{approvingRequest.transactionId}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Target Plan:</span>
+                <span className="font-bold text-purple-400">PRO Plan (30-day Access)</span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-xs text-emerald-300 space-y-1">
+              <p className="font-bold">Automated Changes upon approval:</p>
+              <ul className="list-disc list-inside space-y-0.5 text-[11px] text-emerald-200/90">
+                <li>Payment status becomes <strong>APPROVED</strong></li>
+                <li>User plan upgraded from <strong>FREE to PRO</strong></li>
+                <li>Subscription status becomes <strong>ACTIVE</strong></li>
+                <li>100,000 characters and Pro features unlocked immediately</li>
+              </ul>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setApprovingRequest(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isApproving}
+                onClick={() => handleApprovePayment(approvingRequest)}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isApproving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                <span>{isApproving ? 'Approving...' : 'Confirm & Approve Payment'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REJECT PAYMENT MODAL */}
+      {rejectingRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md p-6 rounded-3xl bg-[#12131e] border border-rose-500/40 space-y-5 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-white">Reject Payment Request</h3>
+                <p className="text-xs text-slate-400">User will strictly remain on FREE plan</p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">User:</span>
+                <span className="font-bold text-white">{rejectingRequest.userName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Email:</span>
+                <span className="font-mono text-slate-300">{rejectingRequest.userEmail}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Transaction ID:</span>
+                <span className="font-mono text-indigo-300">{rejectingRequest.transactionId}</span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">
+                Rejection Reason (Visible to user on their Billing page)
+              </label>
+              <textarea
+                rows={3}
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                placeholder="e.g. Transaction ID was not found in bank records. Please check your TID or re-upload clear proof."
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setRejectingRequest(null);
+                  setRejectionReason('');
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isRejecting}
+                onClick={handleRejectPayment}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md shadow-rose-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isRejecting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                <span>{isRejecting ? 'Rejecting...' : 'Confirm Rejection'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FULL-SCREEN SCREENSHOT VIEWER MODAL */}
+      {selectedScreenshot && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in"
+          onClick={() => setSelectedScreenshot(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] bg-slate-900 rounded-3xl overflow-hidden border border-slate-700 shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-slate-950">
+              <span className="text-xs font-bold text-white flex items-center gap-2">
+                <FileText className="w-4 h-4 text-purple-400" />
+                <span>Uploaded Payment Screenshot Proof</span>
+              </span>
+              <button
+                onClick={() => setSelectedScreenshot(null)}
+                className="text-slate-400 hover:text-white text-xs font-bold px-2 py-1 rounded-lg bg-slate-800"
+              >
+                Close (ESC)
+              </button>
+            </div>
+            <div className="p-4 overflow-auto flex items-center justify-center">
+              <img
+                src={selectedScreenshot}
+                alt="Payment Proof Full"
+                className="max-h-[78vh] object-contain rounded-xl border border-slate-800 shadow-lg"
+              />
             </div>
           </div>
         </div>

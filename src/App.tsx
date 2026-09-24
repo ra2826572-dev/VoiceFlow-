@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider, useToast } from './context/ToastContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { UsageProvider } from './context/UsageContext';
 import { Navbar } from './components/Navbar';
 import { AuthModal } from './components/AuthModal';
 import { Sidebar } from './components/Sidebar';
@@ -106,11 +107,18 @@ const MainAppContent: React.FC = () => {
   const { error: toastError } = useToast();
 
   const [currentView, setCurrentView] = useState<string>(() => {
-    return localStorage.getItem('voiceflow_user') ? 'dashboard' : 'login';
+    // When the link is opened in a new tab/session, require user to login first
+    const isSessionLoggedIn =
+      typeof window !== 'undefined' &&
+      sessionStorage.getItem('voiceflow_session_logged_in') === 'true';
+    return isSessionLoggedIn ? 'dashboard' : 'login';
   });
 
   useEffect(() => {
-    if (!isAuthenticated && currentView !== 'login' && currentView !== 'landing') {
+    const isSessionLoggedIn =
+      typeof window !== 'undefined' &&
+      sessionStorage.getItem('voiceflow_session_logged_in') === 'true';
+    if (!isSessionLoggedIn && currentView !== 'login') {
       setCurrentView('login');
     }
   }, [isAuthenticated, currentView]);
@@ -157,6 +165,14 @@ const MainAppContent: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    const handleRemoteNavigate = () => {
+      setCurrentView('billing');
+    };
+    window.addEventListener('navigate-to-billing', handleRemoteNavigate);
+    return () => window.removeEventListener('navigate-to-billing', handleRemoteNavigate);
   }, []);
 
   const [conversions, setConversions] = useState<ConversionItem[]>(() => {
@@ -252,10 +268,8 @@ const MainAppContent: React.FC = () => {
       'dashboard',
       'studio',
       'voice-studio',
-      'multi-speaker',
       'writing-studio',
       'multi-language',
-      'audio-studio',
       'video-dubbing',
       'projects',
       'voice-to-text',
@@ -309,7 +323,11 @@ const MainAppContent: React.FC = () => {
       />
 
       {/* Main View Router */}
-      {currentView === 'landing' ? (
+      {!isAuthenticated || currentView === 'login' ? (
+        <main className="flex-1 overflow-y-auto bg-[#090a0f] min-w-0">
+          <LoginView onNavigate={handleNavigate} />
+        </main>
+      ) : currentView === 'landing' ? (
         <main className="flex-1 overflow-y-auto">
           <LandingPage
             onGetStarted={() => {
@@ -333,8 +351,6 @@ const MainAppContent: React.FC = () => {
 
           {/* Workspace Main Scrollable Content */}
           <main className="flex-1 overflow-y-auto bg-[#090a0f] min-w-0">
-            {currentView === 'login' && <LoginView onNavigate={handleNavigate} />}
-
             {currentView === 'dashboard' && (
               <Dashboard
                 onNavigate={handleNavigate}
@@ -513,7 +529,9 @@ export default function App() {
     <ThemeProvider>
       <ToastProvider>
         <AuthProvider>
-          <MainAppContent />
+          <UsageProvider>
+            <MainAppContent />
+          </UsageProvider>
         </AuthProvider>
       </ToastProvider>
     </ThemeProvider>
