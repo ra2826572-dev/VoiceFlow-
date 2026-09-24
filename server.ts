@@ -349,6 +349,92 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallbackValue: T
 }
 
 /**
+ * Multi-model resilient text generation with priority order:
+ * 1. gemini-3.1-flash-lite (fast, highly available, low latency)
+ * 2. gemini-3.6-flash (high intelligence)
+ * 3. gemini-3.8-flash (fallback)
+ */
+async function generateTextWithGemini(
+  prompt: string,
+  options?: {
+    systemInstruction?: string;
+    temperature?: number;
+    timeoutMs?: number;
+  }
+): Promise<string> {
+  const ai = getGeminiClient();
+  if (!ai) return "";
+
+  const models = ["gemini-3.1-flash-lite", "gemini-3.6-flash", "gemini-3.8-flash"];
+  const timeoutMs = options?.timeoutMs || 25000;
+
+  for (const model of models) {
+    try {
+      const call = ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          systemInstruction: options?.systemInstruction,
+          temperature: options?.temperature ?? 0.75,
+        },
+      });
+
+      const response: any = await withTimeout(call, timeoutMs, null);
+      if (response?.text && response.text.trim().length > 0) {
+        return response.text.trim();
+      }
+    } catch (err: any) {
+      console.warn(`[Gemini ${model}] text generation failed:`, err?.message || err);
+    }
+  }
+
+  return "";
+}
+
+/**
+ * Multi-model resilient JSON generation with priority order
+ */
+async function generateJsonWithGemini<T = any>(
+  prompt: string,
+  options?: {
+    systemInstruction?: string;
+    timeoutMs?: number;
+  }
+): Promise<T | null> {
+  const ai = getGeminiClient();
+  if (!ai) return null;
+
+  const models = ["gemini-3.1-flash-lite", "gemini-3.6-flash", "gemini-3.8-flash"];
+  const timeoutMs = options?.timeoutMs || 25000;
+
+  for (const model of models) {
+    try {
+      const call = ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          systemInstruction: options?.systemInstruction,
+          responseMimeType: "application/json",
+          temperature: 0.6,
+        },
+      });
+
+      const response: any = await withTimeout(call, timeoutMs, null);
+      if (response?.text) {
+        const text = response.text.trim();
+        const cleaned = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "");
+        const parsed = JSON.parse(cleaned);
+        if (parsed) return parsed as T;
+      }
+    } catch (err: any) {
+      console.warn(`[Gemini ${model}] JSON generation failed:`, err?.message || err);
+    }
+  }
+
+  return null;
+}
+
+/**
  * Wraps raw 16-bit linear PCM audio in a standard 44-byte RIFF WAV header
  */
 function convertPcmToWav(pcmBuffer: Buffer, sampleRate = 24000, numChannels = 1, bitsPerSample = 16): Buffer {
@@ -1228,55 +1314,53 @@ app.post("/api/ai/write", async (req, res) => {
     const taskGuidance = toolPrompts[toolType] || "Write compelling, speech-ready copy.";
     const actionGuidance = actionDirectives[action] || "";
 
-    let prompt = `You are a world-class AI Content Creator, Copywriter, and Scriptwriter.
-Goal: ${taskGuidance}
-Language: Write fluently, authentically, and idiomatically in ${lang}.
-Tone: ${tone}
-Audience: ${audience}
-Desired Length: ${length}
-${actionGuidance ? `Action Directive: ${actionGuidance}` : ""}
-${activeBrandVoice ? `Brand Voice Profile: Use Brand Name "${activeBrandVoice.name}", Tone "${activeBrandVoice.tone}", Style "${activeBrandVoice.writingStyle}", Preferred CTA "${activeBrandVoice.preferredCTA}". Avoid words: ${activeBrandVoice.wordsToAvoid.join(", ")}.` : ""}
-${seoKeywords ? `SEO Keywords to integrate naturally: ${seoKeywords}` : ""}
-${customInstructions ? `Custom User Instructions: ${customInstructions}` : ""}
+    const systemInstruction = `You are a world-class Elite Content Creator, Hollywood Script Doctor, High-Converting Direct Response Copywriter, and Viral Media Producer.
+CRITICAL MANDATES FOR PRO-LEVEL OUTPUT:
+1. Tailor every word strictly to the user's explicit prompt, topic, industry, and tone. Never output generic boilerplate or repeat standard templates.
+2. Start with an irresistible, high-retention pattern interrupt or hook that commands attention within seconds.
+3. Deliver deep substance, vivid storytelling, concrete nuances, crisp cadence, and natural vocal rhythm.
+4. Structure the content cleanly (with timestamps, headings, or stage directions where appropriate for scripts, or punchy line-breaks for social copy).
+5. Language & Dialect Mastery:
+   - If Urdu (اردو), write authentic, idiomatic, eloquent, and natural Urdu in proper Urdu script.
+   - If Roman Urdu, write smooth, modern conversational Roman Urdu with authentic phrasing.
+   - If English, Hindi, Arabic, Spanish, etc., write like an elite native specialist in that language.
+6. Return purely the finalized pro-level content ready to record or publish, with zero robotic fluff like "Here is your script:" or meta-commentary.`;
 
-Topic / Source Input:
+    const userPrompt = `GOAL / FORMAT: ${taskGuidance}
+TARGET LANGUAGE: ${lang}
+DESIRED TONE: ${tone}
+TARGET AUDIENCE: ${audience}
+TARGET LENGTH / DURATION: ${length}
+${actionGuidance ? `ACTION DIRECTIVE: ${actionGuidance}` : ""}
+${activeBrandVoice ? `BRAND VOICE PROFILE: Brand Name "${activeBrandVoice.name}", Tone "${activeBrandVoice.tone}", Style "${activeBrandVoice.writingStyle}", Preferred CTA "${activeBrandVoice.preferredCTA}". Words to avoid: ${activeBrandVoice.wordsToAvoid.join(", ")}.` : ""}
+${seoKeywords ? `SEO KEYWORDS TO SEAMLESSLY INTEGRATE: ${seoKeywords}` : ""}
+${customInstructions ? `CUSTOM USER INSTRUCTIONS: ${customInstructions}` : ""}
+
+USER PROMPT / TOPIC / INPUT TEXT:
 """
 ${topic || currentText}
 """
 
-Output Instructions:
-- Output clean, ready-to-use content.
-- Use natural pacing and formatting suitable for reading and voiceover.
-- Do NOT include robotic boilerplate like "Here is your script:".`;
+Deliver the ultimate PRO-LEVEL master version now.`;
 
-    let generatedText = "";
+    let generatedText = await generateTextWithGemini(userPrompt, {
+      systemInstruction,
+      temperature: 0.8,
+      timeoutMs: 25000,
+    });
 
-    if (ai) {
-      try {
-        const geminiCall = ai.models.generateContent({
-          model: "gemini-3.8-flash",
-          contents: [{ parts: [{ text: prompt }] }],
-        });
-
-        const response: any = await withTimeout(geminiCall, 9000, null);
-        if (response?.text) {
-          generatedText = response.text.trim();
-        }
-      } catch (geminiErr: any) {
-        console.warn("Gemini write endpoint fallback:", geminiErr?.message);
-      }
-    }
-
-    // Dynamic smart fallback
+    // Dynamic smart contextual fallback if models were unreachable
     if (!generatedText) {
-      if (lang.toLowerCase().includes("ur") && !lang.toLowerCase().includes("roman")) {
-        generatedText = `[0:00 - ابتدائی جھلک]\nکیا آپ صرف چند سیکنڈز میں اسٹوڈیو لیول کا شاندار اسکرپٹ اور وائس اوور تیار کرنا چاہتے ہیں؟\n\n[0:30 - اہم نکات]\nوائس فلو اے آئی کی جدید نیورل ٹیکنالوجی آپ کی تحریر کو قدرتی انسانی لہجے میں بدل دیتی ہے۔\n\n[1:00 - اختتام و عمل کی دعوت]\nابھی مفت میں استعمال شروع کریں اور اپنی ڈیجیٹل تخلیقات کو ایک نئی بلندی پر لے جائیں!`;
-      } else if (lang.toLowerCase().includes("roman")) {
-        generatedText = `[0:00 - HOOK]\nKya aap jante hain ke modern AI ki madad se aap 10 seconds mein broadcast-ready voiceover aur script create kar sakte hain?\n\n[0:30 - CORE INSIGHT]\nVoiceFlow AI aapke alfaz ko qudrati human voice mein tabdeel karta hai baghair kisi expensive studio setup ke.\n\n[1:00 - CTA]\nAaj hi VoiceFlow AI Studio try karein aur apna pehla project launch karein!`;
-      } else if (toolType === "linkedin_post" || toolType === "twitter_post") {
-        generatedText = `The biggest shift in content creation isn't more tools.\n\nIt's using AI to turn 1 core idea into 10 multi-channel assets in seconds:\n\n1. Long-form video script\n2. 5 high-converting Reels/Shorts\n3. High-open rate newsletter\n4. Thought-leadership breakdown\n\nStop rebuilding from scratch. Repurpose with intent.\n\nWhat's your biggest content bottleneck this week?`;
+      const topicClean = (topic || currentText || "Content Creation").trim();
+      const isUrdu = lang.toLowerCase().includes("ur") && !lang.toLowerCase().includes("roman");
+      const isRoman = lang.toLowerCase().includes("roman");
+
+      if (isUrdu) {
+        generatedText = `[0:00 - پاور ہک]\n"${topicClean}" کے بارے میں کیا آپ وہ راز جانتے ہیں جو 99٪ لوگ نظر انداز کر دیتے ہیں؟\n\n[0:20 - بنیادی مسئلہ و گہرائی]\nجب ہم "${topicClean}" کی بات کرتے ہیں، تو سب سے بڑی غلطی بنیادی حکمت عملی کو نہ سمجھنا ہے۔ اصل حقیقت یہ ہے کہ شاندار کامیابی صحیح سسٹمز اور مستقل مزاجی سے حاصل ہوتی ہے۔\n\n[0:50 - 3 اہم عملی اقدامات]\n1. پہلا قدم: واضح ہدف بنائیں اور جدید ٹیکنالوجی سے مکمل فائدہ اٹھائیں۔\n2. دوسرا قدم: معیار پر کبھی سمجھوتہ نہ کریں اور تسلسل برقرار رکھیں۔\n3. تیسرا قدم: اپنے نتائج کا باریکی سے جائزہ لیں اور ہر روز خود کو بہتر بنائیں۔\n\n[1:40 - اختتام و عمل کی دعوت]\nاگر آپ واقعی "${topicClean}" میں آگے بڑھنا چاہتے ہیں تو آج ہی عملی قدم اٹھائیں! اپنی رائے کا اظہار نیچے ضرور کریں۔`;
+      } else if (isRoman) {
+        generatedText = `[0:00 - HOOK]\nKya aap jante hain ke "${topicClean}" ke baray mein 99% log sab se bari ghalti kya karte hain?\n\n[0:25 - CORE BREAKDOWN]\nJab baat aati hai "${topicClean}" ki, toh log shortcuts dhoondhte hain. Lekin haqeeqat yeh hai ke pro level results ke liye aapko system aur strategy chahiye hoti hai.\n\n[1:00 - 3 ACTIONABLE STEPS]\n1. Step 1: Pehle fundamentals ko master karein.\n2. Step 2: Modern smart workflows aur tools ka sahara lein.\n3. Step 3: Consistency ko priority banayein.\n\n[1:45 - OUTRO & CTA]\nAapka "${topicClean}" ke hawalay se kya experience raha hai? Comments mein zaroor batayein aur follow karein!`;
       } else {
-        generatedText = `[0:00 - HOOK]\nWhat if you could turn simple text into studio-grade voiceovers and high-converting scripts in less than 5 seconds? Today, we are breaking down the exact workflow.\n\n[0:30 - THE SECRET]\nMost creators waste hours recording and rerecording. But with modern neural speech models, your voice tone, pacing, and emotion can be perfected automatically.\n\n[1:45 - ACTIONABLE STEPS]\nStep 1: Draft your high-impact script with conversational pacing.\nStep 2: Choose a neural voice that matches your audience.\nStep 3: Export in pristine studio audio.\n\n[3:00 - OUTRO & CTA]\nStart building your audio and video empire today with VoiceFlow AI!`;
+        generatedText = `[0:00 - THE HOOK]\nHere is the brutal truth about "${topicClean}" that nobody in the industry is talking about.\n\n[0:25 - THE CORE BREAKDOWN]\nWhen most people approach ${topicClean}, they focus on the wrong metrics. They waste hours on surface-level tactics instead of mastering the high-leverage principles that actually drive results.\n\n[1:10 - 3 STRATEGIC PILLARS]\n1. Pillar One: Establish a crystal-clear framework focused on speed and leverage.\n2. Pillar Two: Cut the noise and execute with relentless consistency.\n3. Pillar Three: Optimize and scale based on real performance data.\n\n[2:00 - CONCLUSION & CALL TO ACTION]\nMastering "${topicClean}" isn't about working harder; it's about executing with precision. Apply these three principles today and share your biggest breakthrough in the comments below!`;
       }
     }
 
@@ -1306,12 +1390,7 @@ app.post("/api/ai/repurpose", async (req, res) => {
       return res.status(400).json({ error: "Source content is required for repurposing" });
     }
 
-    const ai = getGeminiClient();
-    let pack = null;
-
-    if (ai) {
-      try {
-        const prompt = `You are a multi-channel content repurposing expert.
+    const prompt = `You are a multi-channel content repurposing expert.
 Transform the following source content into a structured marketing pack in ${language}.
 Return a strict JSON object with these exact keys:
 {
@@ -1331,20 +1410,10 @@ Source Content:
 ${content}
 """`;
 
-        const geminiCall = ai.models.generateContent({
-          model: "gemini-3.8-flash",
-          contents: [{ parts: [{ text: prompt }] }],
-          config: { responseMimeType: "application/json" },
-        });
-
-        const response: any = await withTimeout(geminiCall, 9000, null);
-        if (response?.text) {
-          pack = JSON.parse(response.text);
-        }
-      } catch (err: any) {
-        console.warn("Repurpose fallback triggered:", err?.message);
-      }
-    }
+    let pack = await generateJsonWithGemini<any>(prompt, {
+      systemInstruction: "You are an elite marketing strategist and copy repurposing engine. Return valid JSON only.",
+      timeoutMs: 22000,
+    });
 
     if (!pack) {
       pack = {
@@ -1396,12 +1465,7 @@ app.post("/api/ai/analyze", async (req, res) => {
       return res.status(400).json({ error: "Content is required for analysis" });
     }
 
-    const ai = getGeminiClient();
-    let analysis = null;
-
-    if (ai) {
-      try {
-        const prompt = `You are an expert editorial copy editor and speech analyst.
+    const prompt = `You are an expert editorial copy editor and speech analyst.
 Analyze the following text in ${language} and return a strict JSON object with these exact keys:
 {
   "readabilityScore": 88,
@@ -1420,20 +1484,10 @@ Text to analyze:
 ${content}
 """`;
 
-        const geminiCall = ai.models.generateContent({
-          model: "gemini-3.8-flash",
-          contents: [{ parts: [{ text: prompt }] }],
-          config: { responseMimeType: "application/json" },
-        });
-
-        const response: any = await withTimeout(geminiCall, 7000, null);
-        if (response?.text) {
-          analysis = JSON.parse(response.text);
-        }
-      } catch (err: any) {
-        console.warn("Analyzer fallback triggered:", err?.message);
-      }
-    }
+    let analysis = await generateJsonWithGemini<any>(prompt, {
+      systemInstruction: "You are a senior editorial director and speech coach. Return valid JSON only.",
+      timeoutMs: 20000,
+    });
 
     if (!analysis) {
       const words = content.split(/\s+/).filter(Boolean).length;
@@ -1471,12 +1525,7 @@ app.post("/api/ai/autocomplete", async (req, res) => {
       return res.json({ success: true, suggestion: "" });
     }
 
-    const ai = getGeminiClient();
-    let suggestion = "";
-
-    if (ai) {
-      try {
-        const prompt = `You are an AI writing assistant providing inline autocomplete.
+    const prompt = `You are an AI writing assistant providing inline autocomplete.
 Complete the sentence or paragraph naturally in ${language} with a ${tone} tone.
 Provide ONLY the continuation text (15-30 words) that seamlessly appends to the prefix. Do not repeat the prefix.
 
@@ -1485,19 +1534,11 @@ Prefix:
 ${prefix}
 """`;
 
-        const geminiCall = ai.models.generateContent({
-          model: "gemini-3.8-flash",
-          contents: [{ parts: [{ text: prompt }] }],
-        });
-
-        const response: any = await withTimeout(geminiCall, 4000, null);
-        if (response?.text) {
-          suggestion = response.text.trim();
-        }
-      } catch (err: any) {
-        console.warn("Autocomplete fallback:", err?.message);
-      }
-    }
+    let suggestion = await generateTextWithGemini(prompt, {
+      systemInstruction: "You are an expert predictive writing engine. Return only the next logical continuation words.",
+      temperature: 0.7,
+      timeoutMs: 15000,
+    });
 
     if (!suggestion) {
       suggestion = " and discover how easy it is to produce high-impact audio content that resonates with your global audience.";
@@ -1513,12 +1554,8 @@ ${prefix}
 app.post("/api/ai/ideas", async (req, res) => {
   try {
     const { topic = "AI tools for content creators", language = "English" } = req.body;
-    const ai = getGeminiClient();
-    let ideasPack = null;
 
-    if (ai) {
-      try {
-        const prompt = `Generate a creative ideas bundle for the topic "${topic}" in ${language}.
+    const prompt = `Generate an elite, high-converting creative ideas bundle for the topic "${topic}" in ${language}.
 Return a strict JSON object with:
 {
   "videoIdeas": ["20 creative video/content ideas"],
@@ -1528,20 +1565,10 @@ Return a strict JSON object with:
   "ctas": ["10 call-to-action lines"]
 }`;
 
-        const geminiCall = ai.models.generateContent({
-          model: "gemini-3.8-flash",
-          contents: [{ parts: [{ text: prompt }] }],
-          config: { responseMimeType: "application/json" },
-        });
-
-        const response: any = await withTimeout(geminiCall, 9000, null);
-        if (response?.text) {
-          ideasPack = JSON.parse(response.text);
-        }
-      } catch (err: any) {
-        console.warn("Ideas generator fallback:", err?.message);
-      }
-    }
+    let ideasPack = await generateJsonWithGemini<any>(prompt, {
+      systemInstruction: "You are a master creative director and viral media strategist. Return valid JSON only.",
+      timeoutMs: 22000,
+    });
 
     if (!ideasPack) {
       ideasPack = {
@@ -1570,12 +1597,7 @@ app.post("/api/ai/script-builder", async (req, res) => {
       targetDurationMinutes = 2,
     } = req.body;
 
-    const ai = getGeminiClient();
-    let sections = null;
-
-    if (ai) {
-      try {
-        const prompt = `You are an award-winning scriptwriter.
+    const prompt = `You are an award-winning scriptwriter.
 Create a structured timeline script for "${topic}" in ${language} (${tone} tone, ~${targetDurationMinutes} minutes).
 Return a strict JSON object with a "sections" array:
 {
@@ -1631,53 +1653,45 @@ Return a strict JSON object with a "sections" array:
   ]
 }`;
 
-        const geminiCall = ai.models.generateContent({
-          model: "gemini-3.8-flash",
-          contents: [{ parts: [{ text: prompt }] }],
-          config: { responseMimeType: "application/json" },
-        });
+    const parsedData = await generateJsonWithGemini<any>(prompt, {
+      systemInstruction: "You are a professional Hollywood script doctor and video producer. Return valid JSON only.",
+      timeoutMs: 22000,
+    });
 
-        const response: any = await withTimeout(geminiCall, 9000, null);
-        if (response?.text) {
-          sections = JSON.parse(response.text).sections;
-        }
-      } catch (err: any) {
-        console.warn("Script builder fallback:", err?.message);
-      }
-    }
+    let sections = parsedData?.sections;
 
-    if (!sections) {
+    if (!sections || !Array.isArray(sections)) {
       sections = [
         {
           id: "sec-1",
           stage: "hook",
           title: "0:00 - High-Impact Hook",
-          text: `What if you could turn simple ideas into studio-grade voiceovers in seconds?`,
-          estimatedSeconds: 6,
+          text: `What if everything you knew about ${topic} was missing the single most critical factor?`,
+          estimatedSeconds: 8,
           tips: "Deliver with high vocal energy and direct eye contact.",
         },
         {
           id: "sec-2",
           stage: "intro",
-          title: "0:06 - Problem & Promise",
-          text: `Most creators burn out recording endless takes. Today, we're changing that with VoiceFlow AI.`,
-          estimatedSeconds: 15,
-          tips: "Build empathy with the creator's daily struggle.",
+          title: "0:08 - Problem & Promise",
+          text: `Most people struggle with ${topic} because they rely on outdated methods. Today, we break down the modern approach.`,
+          estimatedSeconds: 20,
+          tips: "Build empathy with the audience's daily struggle.",
         },
         {
           id: "sec-3",
           stage: "main",
-          title: "0:21 - Core Breakdown",
-          text: `By combining neural voice cloning with multi-lingual translation, you can publish in 15+ languages without extra effort.`,
-          estimatedSeconds: 30,
+          title: "0:28 - Core Breakdown",
+          text: `The core breakdown of ${topic} relies on three pillars: strategic preparation, relentless consistency, and high-impact leverage.`,
+          estimatedSeconds: 45,
           tips: "Speak with authoritative conviction.",
         },
         {
           id: "sec-4",
           stage: "cta",
-          title: "0:51 - Call to Action",
-          text: `Claim your 10,000 free monthly credits at VoiceFlow AI and launch your first audio project today!`,
-          estimatedSeconds: 10,
+          title: "1:13 - Call to Action",
+          text: `Apply these insights into your workflow today and share your results in the comments below!`,
+          estimatedSeconds: 15,
           tips: "Keep it punchy and clear.",
         },
       ];
@@ -1982,13 +1996,8 @@ async function performTranslation(text: string, sourceLangInput: string, targetL
     return { translatedText: text.trim(), detectedSourceLanguage: detectedSource };
   }
 
-  const ai = getGeminiClient();
-  let translatedText = "";
-
-  // 1. Primary Engine: Gemini 3.8 Flash via @google/genai SDK
-  if (ai) {
-    try {
-      const prompt = `You are a professional multi-language translator engine.
+  // 1. Primary Engine: Multi-Model Gemini Engine via @google/genai SDK
+  const prompt = `You are a professional multi-language translator engine.
 Translate the input text accurately, fluently, and idiomatically from ${detectedSource} to ${targetLangName}.
 
 Special requirements:
@@ -2003,18 +2012,14 @@ Text to translate:
 ${text.trim()}
 """`;
 
-      const geminiCall = ai.models.generateContent({
-        model: "gemini-3.8-flash",
-        contents: [{ parts: [{ text: prompt }] }],
-      });
+  let translatedText = await generateTextWithGemini(prompt, {
+    systemInstruction: "You are an elite polyglot neural translator. Translate with maximum fidelity and natural spoken nuance. Output ONLY translation.",
+    temperature: 0.3,
+    timeoutMs: 15000,
+  });
 
-      const response: any = await withTimeout(geminiCall, 6000, null);
-      if (response?.text) {
-        translatedText = response.text.trim().replace(/^["']|["']$/g, '');
-      }
-    } catch (err: any) {
-      console.warn("Gemini translation fallback triggered:", err?.message);
-    }
+  if (translatedText) {
+    translatedText = translatedText.replace(/^["']|["']$/g, '');
   }
 
   // 2. High-Speed Secondary Engine: Google GTX REST API
@@ -2175,32 +2180,24 @@ app.post("/api/ai/assistant", async (req, res) => {
     let responseText = "";
     let updatedContent = "";
 
-    if (ai) {
-      try {
-        const fullPrompt = `${systemInstruction}${contextSnippet}\n\nUSER REQUEST: ${promptText}\n\nInstructions: Be helpful, accurate, and concise. If you are modifying the user's script or generating replacement copy, start your response with a brief 1-sentence note, followed by the exact rewritten text enclosed in <<<REVISED_CONTENT>>> and <<</REVISED_CONTENT>>>.`;
+    const fullPrompt = `${systemInstruction}${contextSnippet}\n\nUSER REQUEST: ${promptText}\n\nInstructions: Be helpful, accurate, and concise. If you are modifying the user's script or generating replacement copy, start your response with a brief 1-sentence note, followed by the exact rewritten text enclosed in <<<REVISED_CONTENT>>> and <<</REVISED_CONTENT>>>.`;
 
-        const geminiCall = ai.models.generateContent({
-          model: "gemini-3.8-flash",
-          contents: [{ parts: [{ text: fullPrompt }] }],
-        });
+    const generated = await generateTextWithGemini(fullPrompt, {
+      temperature: 0.7,
+      timeoutMs: 18000,
+    });
 
-        const response: any = await withTimeout(geminiCall, 6500, null);
-        if (response?.text) {
-          const raw = response.text.trim();
-          if (raw.includes("<<<REVISED_CONTENT>>>")) {
-            const parts = raw.split("<<<REVISED_CONTENT>>>");
-            responseText = parts[0].trim();
-            const rest = parts[1].split("<<</REVISED_CONTENT>>>");
-            updatedContent = rest[0].trim();
-          } else {
-            responseText = raw;
-            if (action && action !== "chat") {
-              updatedContent = raw;
-            }
-          }
+    if (generated) {
+      if (generated.includes("<<<REVISED_CONTENT>>>")) {
+        const parts = generated.split("<<<REVISED_CONTENT>>>");
+        responseText = parts[0].trim();
+        const rest = parts[1].split("<<</REVISED_CONTENT>>>");
+        updatedContent = rest[0].trim();
+      } else {
+        responseText = generated;
+        if (action && action !== "chat") {
+          updatedContent = generated;
         }
-      } catch (geminiErr: any) {
-        console.warn("Assistant Gemini error:", geminiErr?.message);
       }
     }
 
@@ -2416,6 +2413,7 @@ interface BackendManagedUser {
   id: string;
   auth_user_id: string;
   name: string;
+  username?: string;
   email: string;
   avatar?: string;
   role: BackendUserRole;
@@ -2581,17 +2579,22 @@ registerDubbingRoutes(app, getGeminiClient, (action, details, userId) => {
 // POST /api/auth/signup - AUTOMATIC USER REGISTRATION
 app.post('/api/auth/signup', (req, res) => {
   try {
-    const { name, email, password, plan = 'free' } = req.body;
+    const { name, username, email, password, plan = 'free' } = req.body;
     if (!email) {
       return res.status(400).json({ error: 'Email is required' });
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const cleanName = (name || cleanEmail.split('@')[0] || 'User').trim();
+    const cleanName = (name || username || cleanEmail.split('@')[0] || 'User').trim();
+    const cleanUsername = (username || cleanEmail.split('@')[0] || 'user').trim();
 
     // Check if user already exists
-    let existingUser = managedUsers.find((u) => u.email.toLowerCase() === cleanEmail);
+    let existingUser = managedUsers.find(
+      (u) => u.email.toLowerCase() === cleanEmail || (u.username && u.username.toLowerCase() === cleanUsername.toLowerCase())
+    );
     if (existingUser) {
+      if (name) existingUser.name = cleanName;
+      if (username) existingUser.username = cleanUsername;
       existingUser.lastLogin = new Date().toISOString();
       existingUser.loginCount = (existingUser.loginCount || 1) + 1;
       existingUser.activityLogs.unshift({
@@ -2613,6 +2616,7 @@ app.post('/api/auth/signup', (req, res) => {
       id: newId,
       auth_user_id: authUserId,
       name: cleanName,
+      username: cleanUsername,
       email: cleanEmail,
       avatar: '',
       role: 'user', // STRICT SECURITY RULE: Default role for all registrations
@@ -2676,7 +2680,7 @@ app.post('/api/auth/signup', (req, res) => {
     broadcastAdminEvent(
       'user_signup',
       '🎉 New user registered',
-      `${cleanName} (${cleanEmail}) registered.`,
+      `${cleanName} (@${cleanUsername}, ${cleanEmail}) registered.`,
       newUser
     );
 
@@ -2694,20 +2698,30 @@ app.post('/api/auth/signup', (req, res) => {
 // POST /api/auth/signin
 app.post('/api/auth/signin', (req, res) => {
   try {
-    const { email, name } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email required' });
+    const { email, username, name, password } = req.body;
+    const identifier = (email || username || '').trim().toLowerCase();
+    if (!identifier) return res.status(400).json({ error: 'Email or Username required' });
 
-    const cleanEmail = email.trim().toLowerCase();
-    let user = managedUsers.find((u) => u.email.toLowerCase() === cleanEmail);
+    let user = managedUsers.find(
+      (u) =>
+        u.email.toLowerCase() === identifier ||
+        (u.username && u.username.toLowerCase() === identifier) ||
+        (identifier.includes('@') && u.email.toLowerCase() === identifier)
+    );
 
     if (!user) {
       // Auto-provision user if logging in first time. ALWAYS role = 'user'
       const newId = 'u-' + (managedUsers.length + 101);
       const authUserId = 'auth_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+      const cleanEmail = identifier.includes('@') ? identifier : `${identifier}@voiceflow.ai`;
+      const cleanUsername = username || (identifier.includes('@') ? identifier.split('@')[0] : identifier);
+      const cleanName = (name || cleanUsername || 'User').trim();
+
       user = {
         id: newId,
         auth_user_id: authUserId,
-        name: (name || cleanEmail.split('@')[0] || 'User').trim(),
+        name: cleanName,
+        username: cleanUsername,
         email: cleanEmail,
         avatar: '',
         role: 'user', // STRICT SECURITY RULE: Default role is always user
@@ -2754,11 +2768,13 @@ app.post('/api/auth/signin', (req, res) => {
       };
       managedUsers.unshift(user);
       saveUsersDb();
-      broadcastAdminEvent('user_signup', '🎉 New user registered', `${user.name} (${user.email}) registered via email.`, user);
+      broadcastAdminEvent('user_signup', '🎉 New user registered', `${user.name} (@${user.username || user.name}) signed in.`, user);
     } else {
       if (user.isBanned || user.status === 'suspended') {
         return res.status(403).json({ error: 'Account has been suspended by administration.' });
       }
+      if (name && !user.name) user.name = name;
+      if (username && !user.username) user.username = username;
       user.lastLogin = new Date().toISOString();
       user.loginCount = (user.loginCount || 1) + 1;
       user.activityLogs.unshift({

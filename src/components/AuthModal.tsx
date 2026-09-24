@@ -34,6 +34,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>(initialMode);
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -51,13 +52,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
-      error('Please enter your email and password');
+    if (!email && !username) {
+      error('Please enter your email or username');
+      return;
+    }
+    if (!password) {
+      error('Please enter your password');
       return;
     }
     setIsLoading(true);
     try {
-      const ok = await login(email);
+      const identifier = email.trim() || username.trim();
+      const ok = await login(identifier, password, name, username);
       if (ok) {
         success('Signed in successfully! Welcome back.');
         onSuccess?.();
@@ -74,6 +80,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     e.preventDefault();
     if (!name.trim()) {
       error('Please enter your full name');
+      return;
+    }
+    if (!username.trim()) {
+      error('Please choose a username');
       return;
     }
     if (!email.trim() || !email.includes('@')) {
@@ -95,7 +105,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setIsLoading(true);
     try {
-      const ok = await signup(name, email);
+      const ok = await signup(name.trim(), username.trim(), email.trim(), password);
       if (ok) {
         success('Account created successfully! Welcome to VoiceFlow AI.');
         onSuccess?.();
@@ -238,15 +248,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <form onSubmit={handleSignIn} className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Email Address
+                Email Address or Username
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   id="auth-signin-email"
-                  type="email"
+                  type="text"
                   required
-                  placeholder="name@example.com"
+                  placeholder="name@example.com or @username"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-9 pr-3 py-2 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -325,21 +335,41 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* SIGN UP FORM */}
         {mode === 'signup' && (
           <form onSubmit={handleSignUp} className="space-y-3.5">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Full Name
-              </label>
-              <div className="relative">
-                <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  id="auth-signup-name"
-                  type="text"
-                  required
-                  placeholder="e.g. Rizwan Ahmad"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    id="auth-signup-name"
+                    type="text"
+                    required
+                    placeholder="e.g. Rizwan Ahmad"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Username
+                </label>
+                <div className="relative">
+                  <span className="text-xs font-bold text-slate-400 absolute left-3 top-1/2 -translate-y-1/2">@</span>
+                  <input
+                    id="auth-signup-username"
+                    type="text"
+                    required
+                    placeholder="rizwan_ai"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                    className="w-full pl-8 pr-3 py-2 rounded-xl text-sm bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
               </div>
             </div>
 

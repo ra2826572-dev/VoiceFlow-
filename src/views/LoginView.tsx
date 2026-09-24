@@ -27,6 +27,7 @@ export const LoginView: React.FC<{ onNavigate: (view: string) => void }> = ({ on
 
   // Form Fields
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -37,9 +38,18 @@ export const LoginView: React.FC<{ onNavigate: (view: string) => void }> = ({ on
   // Handle Sign In
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email && !username) {
+      error('Please enter your email or username');
+      return;
+    }
+    if (!password) {
+      error('Please enter your password');
+      return;
+    }
     setIsLoading(true);
     try {
-      const ok = await login(email, name || 'VoiceFlow User');
+      const identifier = email.trim() || username.trim();
+      const ok = await login(identifier, password, name, username);
       if (ok) {
         success('Signed in successfully! Welcome to VoiceFlow Studio.');
         onNavigate('dashboard');
@@ -54,6 +64,18 @@ export const LoginView: React.FC<{ onNavigate: (view: string) => void }> = ({ on
   // Handle Sign Up
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name.trim()) {
+      error('Please enter your full name');
+      return;
+    }
+    if (!username.trim()) {
+      error('Please enter a username');
+      return;
+    }
+    if (!email.trim() || !email.includes('@')) {
+      error('Please enter a valid email address');
+      return;
+    }
     if (password !== confirmPassword) {
       error('Passwords do not match');
       return;
@@ -61,7 +83,7 @@ export const LoginView: React.FC<{ onNavigate: (view: string) => void }> = ({ on
 
     setIsLoading(true);
     try {
-      const ok = await signup(name, email, password);
+      const ok = await signup(name.trim(), username.trim(), email.trim(), password);
       if (ok) {
         success('Account created successfully! Verification code sent.');
         setMode('verify');
@@ -315,6 +337,21 @@ export const LoginView: React.FC<{ onNavigate: (view: string) => void }> = ({ on
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full pl-10 pr-3 py-2.5 rounded-xl text-xs bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Username</label>
+              <div className="relative">
+                <span className="text-xs font-bold text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2">@</span>
+                <input
+                  type="text"
+                  required
+                  placeholder="rizwan_ai"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl text-xs bg-slate-900 border border-slate-800 text-white placeholder:text-slate-600 focus:ring-2 focus:ring-purple-500"
                 />
               </div>
             </div>

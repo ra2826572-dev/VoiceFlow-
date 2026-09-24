@@ -14,10 +14,8 @@ import { HistoryView } from './views/HistoryView';
 import { ProfileSettingsView } from './views/ProfileSettingsView';
 import { PricingView } from './views/PricingView';
 import { VoiceStudioView } from './views/VoiceStudioView';
-import { MultiSpeakerStudioView } from './views/MultiSpeakerStudioView';
 import { WritingStudioView } from './views/WritingStudioView';
 import { MultiLanguageStudioView } from './views/MultiLanguageStudioView';
-import { AudioStudioView } from './views/AudioStudioView';
 import { VideoDubbingStudioView } from './views/VideoDubbingStudioView';
 import { ProjectsView } from './views/ProjectsView';
 import { AIAssistantView } from './views/AIAssistantView';
@@ -366,8 +364,6 @@ const MainAppContent: React.FC = () => {
               />
             )}
 
-            {currentView === 'multi-speaker' && <MultiSpeakerStudioView />}
-
             {currentView === 'writing-studio' && (
               <WritingStudioView
                 onSendToVoiceStudio={(text) => {
@@ -379,13 +375,10 @@ const MainAppContent: React.FC = () => {
 
             {currentView === 'multi-language' && <MultiLanguageStudioView />}
 
-            {currentView === 'audio-studio' && <AudioStudioView />}
-
             {currentView === 'projects' && (
               <ProjectsView
                 onOpenProject={(proj) => {
                   if (proj.type === 'script') setCurrentView('writing-studio');
-                  else if (proj.type === 'audio') setCurrentView('audio-studio');
                   else setCurrentView('studio');
                 }}
               />

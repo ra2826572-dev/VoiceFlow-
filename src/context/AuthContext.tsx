@@ -8,8 +8,8 @@ interface AuthContextType {
   isSuperAdmin: boolean;
   isModerator: boolean;
   isLoading: boolean;
-  login: (email: string, name?: string) => Promise<boolean>;
-  signup: (name: string, email: string, password?: string) => Promise<boolean>;
+  login: (identifier: string, password?: string, name?: string, username?: string) => Promise<boolean>;
+  signup: (name: string, username: string, email: string, password?: string) => Promise<boolean>;
   loginWithGoogle: () => Promise<boolean>;
   logout: () => void;
   updateProfile: (updates: Partial<UserProfile>) => Promise<boolean>;
@@ -20,6 +20,7 @@ interface AuthContextType {
 const DEFAULT_USER: UserProfile = {
   id: 'user-guest',
   name: 'Guest User',
+  username: 'guest_user',
   email: '',
   avatar: '',
   role: 'user', // STRICT SECURITY: Default role is always 'user'
@@ -101,30 +102,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return targetName.substring(0, 2).toUpperCase();
   }, [user]);
 
-  const login = async (email: string, name?: string): Promise<boolean> => {
+  const login = async (
+    identifier: string,
+    password?: string,
+    name?: string,
+    username?: string
+  ): Promise<boolean> => {
     setIsLoading(true);
     try {
       const res = await fetch('/api/auth/signin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: identifier, username, password }),
       });
       let profileData = DEFAULT_USER;
       if (res.ok) {
         const data = await res.json();
         if (data.user) profileData = { ...profileData, ...data.user };
       }
-      profileData.email = email;
+      if (identifier.includes('@')) {
+        profileData.email = identifier;
+      } else {
+        profileData.email = identifier + '@voiceflow.ai';
+      }
+      if (username) profileData.username = username;
+      else if (!profileData.username) profileData.username = identifier.split('@')[0];
       if (name) profileData.name = name;
       saveUser(profileData);
       setIsLoading(false);
       return true;
     } catch {
       // Local fallback
-      const updated = {
+      const derivedUsername = username || identifier.split('@')[0];
+      const updated: UserProfile = {
         ...(user || DEFAULT_USER),
-        email,
-        name: name || user?.name || 'User',
+        email: identifier.includes('@') ? identifier : `${identifier}@voiceflow.ai`,
+        username: derivedUsername,
+        name: name || user?.name || derivedUsername,
       };
       saveUser(updated);
       setIsLoading(false);
@@ -132,18 +146,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signup = async (name: string, email: string, password?: string): Promise<boolean> => {
+  const signup = async (
+    name: string,
+    username: string,
+    email: string,
+    password?: string
+  ): Promise<boolean> => {
     setIsLoading(true);
     try {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, username, email, password }),
       });
       let newUser: UserProfile = {
         ...DEFAULT_USER,
         id: 'user-' + Date.now(),
         name,
+        username,
         email,
         avatar: '',
         createdAt: new Date().toISOString(),
@@ -163,6 +183,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...DEFAULT_USER,
         id: 'user-' + Date.now(),
         name,
+        username,
         email,
         avatar: '',
       };

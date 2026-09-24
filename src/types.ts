@@ -114,6 +114,7 @@ export type UserRole = 'super_admin' | 'admin' | 'moderator' | 'user';
 export interface UserProfile {
   id: string;
   name: string;
+  username?: string;
   email: string;
   avatar?: string;
   role?: UserRole;

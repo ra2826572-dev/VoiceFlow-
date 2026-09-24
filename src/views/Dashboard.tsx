@@ -147,30 +147,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </span>
           </div>
 
-          {/* Module 2: Multi-Speaker Studio */}
-          <div
-            id="card-quick-multi-speaker"
-            onClick={() => onNavigate('multi-speaker')}
-            className="group p-5 rounded-2xl bg-[#12131a] hover:bg-[#161722] border border-slate-800/80 hover:border-indigo-500/50 transition-all cursor-pointer flex flex-col justify-between shadow-xs"
-          >
-            <div>
-              <div className="w-10 h-10 rounded-xl bg-indigo-950/90 text-indigo-400 border border-indigo-800/50 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <h3 className="text-sm font-bold text-white mb-1.5 flex items-center gap-1.5">
-                <span>Multi-Speaker Studio</span>
-                <span className="text-[9px] px-1 rounded bg-indigo-500/20 text-indigo-300">Dialogue</span>
-              </h3>
-              <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                Orchestrate natural multi-character dialogues and conversational podcast scripts.
-              </p>
-            </div>
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-400 group-hover:translate-x-0.5">
-              <span>Launch Dialogue Flow</span>
-              <span>→</span>
-            </span>
-          </div>
-
           {/* Module 3: AI Writing Studio */}
           <div
             id="card-quick-writing-studio"
@@ -215,30 +191,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
             <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400 group-hover:translate-x-0.5">
               <span>Translate Now</span>
-              <span>→</span>
-            </span>
-          </div>
-
-          {/* Module 5: Professional Audio Studio */}
-          <div
-            id="card-quick-audio-studio"
-            onClick={() => onNavigate('audio-studio')}
-            className="group p-5 rounded-2xl bg-[#12131a] hover:bg-[#161722] border border-slate-800/80 hover:border-blue-500/50 transition-all cursor-pointer flex flex-col justify-between shadow-xs"
-          >
-            <div>
-              <div className="w-10 h-10 rounded-xl bg-blue-950/90 text-blue-400 border border-blue-800/50 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
-                <Headphones className="w-5 h-5" />
-              </div>
-              <h3 className="text-sm font-bold text-white mb-1.5 flex items-center gap-1.5">
-                <span>Audio Studio DAW</span>
-                <span className="text-[9px] px-1 rounded bg-blue-500/20 text-blue-300">Visual</span>
-              </h3>
-              <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                Visual waveform editor. Cut, trim, split, add background music & sound effects.
-              </p>
-            </div>
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-400 group-hover:translate-x-0.5">
-              <span>Open Timeline DAW</span>
               <span>→</span>
             </span>
           </div>
